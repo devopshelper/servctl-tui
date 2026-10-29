@@ -1,156 +1,26 @@
-"""Textual front-end."""
+"""Panes for the original admin modules: overview, cleanup, logs, Syncthing, SIEM."""
 from __future__ import annotations
 
 import os
 import platform
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+
 
 from rich.text import Text
 from textual import on, work
-from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen
-from textual.widgets import (Button, Checkbox, Footer, Header, Input, Label, RichLog, Rule,
-                             Select, Static, TabbedContent, TabPane)
+from textual.app import ComposeResult
+from textual.containers import Grid, Horizontal
+from textual.widgets import Button, Checkbox, Input, Rule, Select, Static
 
-from . import __version__, cleanup, logs, siem, syncthing
-from .core import (Step, capture, default_user, is_root, os_info, read_text, run_plan,
-                   selinux_enforcing, tcp_check, which)
+from .. import cleanup, logs, siem, syncthing
+from ..core import (capture, default_user, is_root, os_info, read_text, selinux_enforcing,
+                    tcp_check, which)
+from .base import Pane, cmd_block, row, section
 
-CSS = """
-Screen { layout: vertical; }
-TabbedContent { height: 1fr; }
-#log { height: 12; border: round $accent; }  /* hidden until an action runs; F3 toggles */
-#log.hidden { display: none; }
-.pane { padding: 0 1; }
-.section { text-style: bold; color: $accent; margin: 1 0 0 0; }
-.hint { color: $text-muted; margin: 0 0 1 0; }
-.row { height: auto; }
-.row > .lbl { width: 24; padding: 1 1 0 0; }
-.row > Input, .row > Select { width: 1fr; max-width: 60; }
-.checks { layout: grid; grid-size: 3; grid-rows: 3; height: auto; grid-gutter: 0 1; }
-.buttons { height: auto; margin: 1 0; }
-.buttons Button { margin: 0 1 0 0; }
-.info { border: round $primary-darken-2; padding: 0 1; height: auto; max-height: 20;
-        overflow-y: auto; }
-.warn { color: $warning; text-style: bold; }
-
-ConfirmScreen { align: center middle; }
-#dialog { width: 90%; max-width: 120; height: 85%; border: thick $warning;
-          background: $surface; padding: 1 2; }
-#dialog-title { text-style: bold; }
-#dialog-plan { height: 1fr; border: round $primary-darken-2; margin: 1 0; }
-#dialog-buttons { height: auto; align-horizontal: right; }
-#dialog-buttons Button { margin-left: 2; }
-"""
-
-
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
-
-def row(label: str, widget) -> Horizontal:
-    return Horizontal(Label(label, classes="lbl"), widget, classes="row")
-
-
-def section(title: str, hint: str = "") -> List[Static]:
-    out = [Static(title, classes="section")]
-    if hint:
-        out.append(Static(hint, classes="hint"))
-    return out
-
-
-class ConfirmScreen(ModalScreen[bool]):
-    BINDINGS = [Binding("escape", "cancel", "Cancel")]
-
-    def __init__(self, title: str, steps: List[Step], dry_run: bool) -> None:
-        super().__init__()
-        self.plan_title = title
-        self.steps = steps
-        self.dry_run = dry_run
-
-    def compose(self) -> ComposeResult:
-        body = "\n\n".join(f"{i}. {s.title}{'  (failure tolerated)' if s.allow_fail else ''}\n"
-                           f"{s.describe()}" for i, s in enumerate(self.steps, 1))
-        mode = ("DRY-RUN: commands are only printed, nothing is changed." if self.dry_run else
-                "LIVE: these commands will run as " + ("root." if is_root() else "a non-root user!"))
-        with Vertical(id="dialog"):
-            yield Label(self.plan_title, id="dialog-title")
-            yield Label(mode, classes="hint" if self.dry_run else "warn")
-            with VerticalScroll(id="dialog-plan"):
-                yield Static(Text(body))
-            with Horizontal(id="dialog-buttons"):
-                yield Button("Cancel", id="no")
-                yield Button("Dry-run" if self.dry_run else "Run", id="yes",
-                             variant="primary" if self.dry_run else "error")
-
-    def on_mount(self) -> None:
-        self.query_one("#no", Button).focus()
-
-    @on(Button.Pressed)
-    def _pressed(self, event: Button.Pressed) -> None:
-        self.dismiss(event.button.id == "yes")
-
-    def action_cancel(self) -> None:
-        self.dismiss(False)
-
-
-class Pane(VerticalScroll):
-    """Base for each tab: value helpers, plan submission, async info refresh."""
-
-    DEFAULT_CLASSES = "pane"
-
-    def val(self, wid: str) -> str:
-        return self.query_one(f"#{wid}", Input).value.strip()
-
-    def num(self, wid: str, what: str) -> int:
-        v = self.val(wid)
-        if not v.lstrip("-").isdigit():
-            raise ValueError(f"{what} must be a whole number")
-        return int(v)
-
-    def chk(self, wid: str) -> bool:
-        return self.query_one(f"#{wid}", Checkbox).value
-
-    def sel(self, wid: str):
-        return self.query_one(f"#{wid}", Select).value
-
-    def set_val(self, wid: str, value) -> None:
-        self.query_one(f"#{wid}", Input).value = "" if value in (None, 0) else str(value)
-
-    def submit(self, title: str, build: Callable[[], List[Step]],
-               on_done: Optional[Callable[[], None]] = None) -> None:
-        try:
-            steps = build()
-        except ValueError as exc:
-            self.app.notify(str(exc), title="Invalid input", severity="error")
-            return
-        self.app.execute(title, steps, on_done or self.refresh_info)
-
-    def set_info(self, wid: str, text: str) -> None:
-        self.app.call_from_thread(self.query_one(f"#{wid}", Static).update, Text(text))
-
-    def on_mount(self) -> None:
-        self.refresh_info()
-
-    def refresh_info(self) -> None:  # overridden
-        pass
-
-
-def _cmd_block(argv: List[str], title: Optional[str] = None) -> str:
-    rc, out = capture(argv)
-    return f"── {title or ' '.join(argv)} ──\n{out}"
-
-
-# --------------------------------------------------------------------------- #
-# Tabs
-# --------------------------------------------------------------------------- #
 
 class OverviewPane(Pane):
     def compose(self) -> ComposeResult:
-        yield from section("Host overview", "F5 refreshes the current tab.")
+        yield from section("Host overview", "F5 refreshes the current screen · Ctrl+P opens the command palette.")
         yield Static("loading…", id="ov-info", classes="info")
 
     @work(thread=True, exclusive=True)
@@ -174,10 +44,10 @@ class OverviewPane(Pane):
         lines.append("Syncthing: " + (", ".join(l.split()[0] + "=" + l.split()[2]
                                                for l in out.splitlines() if l.strip()) or "none"))
         lines.append("")
-        lines.append(_cmd_block(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "overlay",
+        lines.append(cmd_block(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "overlay",
                                  "-x", "squashfs"], "disk"))
-        lines.append(_cmd_block(["free", "-h"], "memory"))
-        lines.append(_cmd_block(["journalctl", "--disk-usage"], "journal"))
+        lines.append(cmd_block(["free", "-h"], "memory"))
+        lines.append(cmd_block(["journalctl", "--disk-usage"], "journal"))
         self.set_info("ov-info", "\n".join(lines))
 
 
@@ -221,12 +91,12 @@ class CleanupPane(Pane):
     @work(thread=True, exclusive=True)
     def refresh_info(self) -> None:
         engine = cleanup.container_engine()
-        self.set_info("cl-df", _cmd_block([engine, "system", "df"]) if engine else
+        self.set_info("cl-df", cmd_block([engine, "system", "df"]) if engine else
                       "No container engine installed.")
         dirs = [d for d in ("/var/cache/dnf", "/var/cache/apt", "/var/log",
                             "/var/lib/systemd/coredump", "/var/crash", "/tmp", "/var/tmp")
                 if os.path.isdir(d)]
-        self.set_info("cl-du", _cmd_block(["du", "-sh", "--one-file-system", *dirs], "usage"))
+        self.set_info("cl-du", cmd_block(["du", "-sh", "--one-file-system", *dirs], "usage"))
 
     @on(Button.Pressed, "#cl-run-containers")
     def _containers(self) -> None:
@@ -403,7 +273,7 @@ class JournaldPane(Pane):
         rc, cfg = capture(["systemd-analyze", "cat-config", "systemd/journald.conf"])
         effective = "\n".join(l for l in cfg.splitlines()
                               if l.strip() and not l.lstrip().startswith("#")) if rc == 0 else cfg
-        self.set_info("jd-info", _cmd_block(["journalctl", "--disk-usage"], "usage") +
+        self.set_info("jd-info", cmd_block(["journalctl", "--disk-usage"], "usage") +
                       "\n── effective settings ──\n" + (effective or "(all defaults)"))
 
     @on(Button.Pressed, "#jd-apply")
@@ -452,10 +322,10 @@ class SyncthingPane(Pane):
                                          if os.path.exists("/usr/local/bin/syncthing") else None)
         parts.append(capture([binary, "--version"])[1] if binary else "syncthing: not installed")
         if user:
-            parts.append(_cmd_block(["systemctl", "--no-pager", "status", "-n", "5",
+            parts.append(cmd_block(["systemctl", "--no-pager", "status", "-n", "5",
                                      f"syncthing@{user}.service"], f"syncthing@{user}"))
         if which("firewall-cmd"):
-            parts.append(_cmd_block(["firewall-cmd", "--list-ports"], "firewalld open ports"))
+            parts.append(cmd_block(["firewall-cmd", "--list-ports"], "firewalld open ports"))
         self.set_info("st-info", "\n".join(parts))
 
     @on(Button.Pressed, "#st-install")
@@ -538,7 +408,7 @@ class SiemPane(Pane):
         text = read_text(siem.CONF_PATH)
         lines = [f"rsyslog: {active}   SELinux enforcing: {selinux_enforcing()}"]
         if os.path.isdir("/var/lib/rsyslog"):
-            lines.append(_cmd_block(["du", "-sh", "/var/lib/rsyslog"], "disk buffer"))
+            lines.append(cmd_block(["du", "-sh", "/var/lib/rsyslog"], "disk buffer"))
         lines.append(f"── {siem.CONF_PATH} ──\n" + (text.rstrip() if text else "(not configured)"))
         self.set_info("sm-info", "\n".join(lines))
 
@@ -583,103 +453,3 @@ class SiemPane(Pane):
         self.submit("Remove SIEM forwarding", siem.remove_plan)
 
 
-# --------------------------------------------------------------------------- #
-# App
-# --------------------------------------------------------------------------- #
-
-class ServctlApp(App):
-    CSS = CSS
-    TITLE = "servctl"
-    BINDINGS = [
-        Binding("f2", "toggle_dry_run", "Dry-run"),
-        Binding("f3", "toggle_log", "Log"),
-        Binding("f4", "clear_log", "Clear log"),
-        Binding("f5", "refresh", "Refresh"),
-        Binding("ctrl+q", "quit", "Quit"),
-    ]
-
-    def __init__(self, dry_run: bool = False) -> None:
-        super().__init__()
-        self.dry_run = dry_run
-        self.busy = False
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with TabbedContent(initial="tab-overview"):
-            tabs: Dict[str, type] = {
-                "Overview": OverviewPane, "Cleanup": CleanupPane, "Logrotate": LogrotatePane,
-                "Journald": JournaldPane, "Syncthing": SyncthingPane, "SIEM": SiemPane,
-            }
-            for title, cls in tabs.items():
-                with TabPane(title, id=f"tab-{title.lower()}"):
-                    yield cls()
-        yield RichLog(id="log", wrap=True, markup=False, highlight=False, max_lines=5000,
-                      classes="hidden")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self._update_subtitle()
-        self.log_line(f"servctl {__version__} - every action shows its exact commands before "
-                      "running. File changes are backed up to /var/backups/servctl.", "bold")
-        if not is_root() and not self.dry_run:
-            self.dry_run = True
-            self._update_subtitle()
-            self.log_line("Not running as root: dry-run mode enabled (F2 to toggle).", "yellow")
-            self.notify("Not running as root: dry-run mode enabled (F2 to toggle).",
-                        severity="warning", timeout=8)
-
-    def _update_subtitle(self) -> None:
-        self.sub_title = ("DRY-RUN" if self.dry_run else "LIVE") + (" · root" if is_root() else " · non-root")
-
-    def log_line(self, text: str, style: str = "") -> None:
-        self.query_one("#log", RichLog).write(Text(text, style=style))
-
-    def execute(self, title: str, steps: List[Step], on_done: Optional[Callable[[], None]]) -> None:
-        if not steps:
-            self.notify("Nothing selected.", severity="warning")
-            return
-        if self.busy:
-            self.notify("Another action is still running.", severity="warning")
-            return
-
-        def confirmed(ok: Optional[bool]) -> None:
-            if ok:
-                self.busy = True
-                self.query_one("#log").remove_class("hidden")
-                self._run(title, steps, self.dry_run, on_done)
-
-        self.push_screen(ConfirmScreen(title, steps, self.dry_run), confirmed)
-
-    @work(thread=True)
-    def _run(self, title: str, steps: List[Step], dry_run: bool,
-             on_done: Optional[Callable[[], None]]) -> None:
-        emit = lambda msg, style="": self.call_from_thread(self.log_line, msg, style)
-        emit(f"▶ {title}{' (dry-run)' if dry_run else ''}", "bold magenta")
-        try:
-            ok = run_plan(steps, emit, dry_run=dry_run)
-        except Exception as exc:  # never let a worker crash the UI
-            emit(f"Unexpected error: {exc!r}", "bold red")
-            ok = False
-        self.busy = False
-        self.call_from_thread(self.notify, f"{title}: {'finished' if ok else 'FAILED - see log'}",
-                              severity="information" if ok else "error")
-        if on_done:
-            self.call_from_thread(on_done)
-
-    def action_toggle_dry_run(self) -> None:
-        self.dry_run = not self.dry_run
-        self._update_subtitle()
-        self.notify("Dry-run ON" if self.dry_run else "LIVE mode: actions will change the system",
-                    severity="information" if self.dry_run else "warning")
-
-    def action_toggle_log(self) -> None:
-        self.query_one("#log").toggle_class("hidden")
-
-    def action_clear_log(self) -> None:
-        self.query_one("#log", RichLog).clear()
-
-    def action_refresh(self) -> None:
-        active = self.query_one(TabbedContent).active_pane
-        if active is not None:
-            for pane in active.query(Pane):
-                pane.refresh_info()

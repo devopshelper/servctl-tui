@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "servctl"
-version = "0.1.0"
+version = "0.2.0"
 description = "TUI control plane for routine Linux server administration"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = ["textual>=1.0,<9"]
+dependencies = ["textual>=1.0,<9", "dnspython>=2.2", "PyYAML>=5.4"]
 
 [project.scripts]
 servctl = "servctl.__main__:main"
 
-[tool.setuptools]
-packages = ["servctl"]
+[tool.setuptools.packages.find]
+include = ["servctl*"]
