@@ -17,7 +17,10 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.color import Color
+from textual.content import Content
 from textual.scrollbar import ScrollBarRender
+from textual.style import Style as VisualStyle
 from textual.widgets import Button, Checkbox, DataTable, Input, Label, RichLog, Select, Static
 
 from ..core import Step, capture, is_root
@@ -25,6 +28,32 @@ from ..core import Step, capture, is_root
 # Whole-cell scrollbars: the smooth ones use ▁▂▃ / ▉▊▋ partial blocks.
 ScrollBarRender.VERTICAL_BARS = [" "] * 8
 ScrollBarRender.HORIZONTAL_BARS = [" "] * 8
+
+def _switch(self) -> Content:
+    """Checkboxes drawn as a toggle switch:  off ▐█ ▌ grey   on ▐ █▌ green.
+
+    Only █ ▐ ▌ and spaces are used - classic terminal characters every font
+    has (Textual's default ▐X▌ uses the same half blocks).
+    """
+    v = self.app.get_css_variables()
+    on = bool(self.value)
+    bg = Color.parse(v["background"])
+    track = Color.parse(v["success"]) if on else Color.parse(v.get("panel-lighten-2", v["panel"]))
+    knob = Color.parse(v.get("foreground", "#e6e6e6"))
+    if not on:
+        knob = knob.blend(track, 0.35)
+    if self.disabled:
+        track, knob = track.blend(bg, 0.55), knob.blend(bg, 0.55)
+    # (bg is only used for the disabled look)
+    outside = self.background_colors[1]
+    cap = VisualStyle(foreground=track, background=outside)   # ▐ ▌ round the track ends
+    pad = VisualStyle(background=track)
+    nub = VisualStyle(foreground=knob, background=track)
+    inner = [(" ", pad), ("█", nub)] if on else [("█", nub), (" ", pad)]
+    return Content.assemble(("▐", cap), *inner, ("▌", cap))
+
+
+Checkbox._button = property(_switch)
 
 # Dropdowns open with Enter/Space only, so Up/Down stay free for moving between fields.
 Select.BINDINGS = [Binding("enter,space", "show_overlay", "Show menu", show=False)]
@@ -107,6 +136,7 @@ Select.-textual-compact > SelectCurrent { background: $boost; }
 Select.-textual-compact:focus > SelectCurrent { background: $primary 25%; }
 SelectOverlay { border: solid $accent; }
 Checkbox.-textual-compact { background: transparent; }
+.pane > Checkbox { margin: 0 0 1 0; }
 Checkbox.-textual-compact:focus { background: $primary 25%; }
 Button.-textual-compact { min-width: 10; padding: 0 2; background: $panel-lighten-2; color: auto 90%;
                           text-style: bold; }

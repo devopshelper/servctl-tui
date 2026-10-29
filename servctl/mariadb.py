@@ -6,6 +6,7 @@ passwords never appear in the process list or in the plan preview.
 """
 from __future__ import annotations
 
+import functools
 import os
 import re
 import secrets
@@ -36,6 +37,31 @@ _DB_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 
 def client() -> str:
     return "mariadb" if which("mariadb") else "mysql"
+
+
+@functools.lru_cache(maxsize=None)
+def _ssl_args(binary: str) -> Tuple[str, ...]:
+    """MariaDB 11.4+ clients demand TLS by default and fail with ERROR 2026 against a
+    server without certificates - even on the local socket. Local socket traffic
+    never leaves the host, so switch TLS off when the client knows the option."""
+    if not shutil.which(binary):
+        return ()
+    try:
+        out = subprocess.run([binary, "--help"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ()
+    args: List[str] = []
+    if re.search(r"^\s+--ssl\b", out, re.M):
+        args.append("--skip-ssl")
+    # Certificate verification (default on in 11.4+) re-enables TLS on its own.
+    if re.search(r"^\s+--ssl-verify-server-cert\b", out, re.M):
+        args.append("--skip-ssl-verify-server-cert")
+    return tuple(args)
+
+
+def client_argv(*extra: str) -> List[str]:
+    c = client()
+    return [c, "--protocol=socket", *_ssl_args(c), *extra]
 
 
 def conf_dir() -> str:
@@ -88,8 +114,9 @@ def generate_password(n: int = 20) -> str:
 
 def sql_step(title: str, sql: str, secret: Optional[str] = None, allow_fail: bool = False) -> Step:
     shown = sql.replace(q(secret), "'********'") if secret else sql
-    return Step.cmd(title, client(), "--protocol=socket", "--batch", stdin=sql, allow_fail=allow_fail,
-                    display=f"{client()} <<SQL\n{shown.strip()}\nSQL")
+    argv = client_argv("--batch")
+    return Step.cmd(title, *argv, stdin=sql, allow_fail=allow_fail,
+                    display=f"{' '.join(argv)} <<SQL\n{shown.strip()}\nSQL")
 
 
 # --------------------------------------------------------------------------- #
@@ -100,7 +127,7 @@ def run_sql(sql: str, timeout: int = 15) -> Tuple[bool, List[List[str]], str]:
     if not shutil.which(client()):
         return False, [], "MariaDB client is not installed"
     try:
-        r = subprocess.run([client(), "--protocol=socket", "-N", "-B"], input=sql, text=True,
+        r = subprocess.run(client_argv("-N", "-B"), input=sql, text=True,
                            capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return False, [], "query timed out"
@@ -272,6 +299,11 @@ def drop_user_plan(user: str, host: str) -> List[Step]:
     return [sql_step(f"Drop user {user}@{host}", f"DROP USER IF EXISTS {account(user, host)};\n")]
 
 
+def _dump_cmd() -> str:
+    dump = "mariadb-dump" if which("mariadb-dump") else "mysqldump"
+    return " ".join([dump, *_ssl_args(dump)])
+
+
 def drop_db_plan(db: str, confirm: str) -> List[Step]:
     check_dbs([db])
     if db in SYSTEM_DBS:
@@ -280,6 +312,6 @@ def drop_db_plan(db: str, confirm: str) -> List[Step]:
         raise ValueError(f"Type the database name '{db}' in the confirmation box to drop it")
     return [Step.cmd(f"Back up {db} first", "bash", "-euo", "pipefail", "-c",
                      f"mkdir -p /var/backups/servctl/mariadb && "
-                     f"{'mariadb-dump' if which('mariadb-dump') else 'mysqldump'} --single-transaction "
+                     f"{_dump_cmd()} --single-transaction "
                      f"--routines --events {db} | gzip > /var/backups/servctl/mariadb/{db}-$(date +%Y%m%d-%H%M%S).sql.gz"),
             sql_step(f"Drop database {db}", f"DROP DATABASE `{db}`;\n")]
