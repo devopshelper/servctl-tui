@@ -26,6 +26,26 @@ from ..core import Step, capture, is_root
 ScrollBarRender.VERTICAL_BARS = [" "] * 8
 ScrollBarRender.HORIZONTAL_BARS = [" "] * 8
 
+# Dropdowns open with Enter/Space only, so Up/Down stay free for moving between fields.
+Select.BINDINGS = [Binding("enter,space", "show_overlay", "Show menu", show=False)]
+Select._merged_bindings = Select._merge_bindings()
+
+
+class NavTable(DataTable):
+    """DataTable whose Up/Down leave the table at its first/last row."""
+
+    def action_cursor_up(self) -> None:
+        if self.row_count == 0 or self.cursor_row <= 0:
+            self.screen.focus_previous()
+        else:
+            super().action_cursor_up()
+
+    def action_cursor_down(self) -> None:
+        if self.row_count == 0 or self.cursor_row >= self.row_count - 1:
+            self.screen.focus_next()
+        else:
+            super().action_cursor_down()
+
 CSS = """
 Screen { layout: vertical; background: $background; }
 
@@ -151,6 +171,46 @@ def make_compact(root) -> None:
         w.compact = True
 
 
+HELP = [
+    ("Tab / Shift+Tab", "next / previous menu (works everywhere)"),
+    ("Up / Down", "move through the menu, or between fields inside a screen"),
+    ("Enter or Right", "from the menu: jump into the screen"),
+    ("Esc", "back to the menu"),
+    ("Left / Right", "between buttons and checkboxes (in text fields: move the cursor)"),
+    ("Enter", "text field: go to the next field  ·  button: press  ·  dropdown: open"),
+    ("Space", "toggle a checkbox, open a dropdown"),
+    ("Up / Down in a table", "move between rows; leaves the table at the first/last row"),
+    ("PageUp / PageDown", "scroll the screen"),
+    ("Ctrl+P", "command palette: jump to any module, change theme"),
+    ("F2", "dry-run on/off"),
+    ("F3 / F4", "show/hide the activity log / clear it"),
+    ("F5", "refresh the current screen"),
+    ("Ctrl+Q", "quit"),
+]
+
+
+class HelpScreen(ModalScreen[None]):
+    BINDINGS = [Binding("escape,f1,q,enter", "close", "Close")]
+    DEFAULT_CSS = """
+    HelpScreen { align: center middle; background: $background 60%; }
+    #help { width: 84; height: auto; max-height: 90%; border: double $accent; background: $surface;
+            padding: 1 2; border-title-color: $accent; border-title-style: bold; }
+    """
+
+    def compose(self) -> ComposeResult:
+        body = Text()
+        for key, what in HELP:
+            body.append(f"{key:<22}", style="bold")
+            body.append(what + "\n")
+        body.append("\nEsc / F1 to close", style="dim")
+        box = Static(body, id="help")
+        box.border_title = " Keys "
+        yield box
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class ConfirmScreen(ModalScreen[bool]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
@@ -197,9 +257,40 @@ class ConfirmScreen(ModalScreen[bool]):
 
 
 class Pane(VerticalScroll):
-    """Base for each module: value helpers, plan submission, async info refresh."""
+    """Base for each module: value helpers, plan submission, async info refresh.
+
+    Keyboard model inside a module: Up/Down (and Left/Right on buttons and
+    checkboxes) move between fields, Enter in a text field moves to the next
+    one. Tab is reserved for switching modules (bound on the app).
+    """
 
     DEFAULT_CLASSES = "pane"
+    can_focus = False
+    BINDINGS = [
+        Binding("down", "next_field", "Next field", show=False),
+        Binding("up", "prev_field", "Previous field", show=False),
+        Binding("right", "next_field", "Next field", show=False),
+        Binding("left", "prev_field", "Previous field", show=False),
+    ]
+
+    def action_next_field(self) -> None:
+        if self.first_field() is None:      # nothing to edit here: arrows scroll instead
+            self.scroll_down()
+        else:
+            self.screen.focus_next()
+
+    def action_prev_field(self) -> None:
+        if self.first_field() is None:
+            self.scroll_up()
+        else:
+            self.screen.focus_previous()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.screen.focus_next()
+
+    def first_field(self):
+        return next((w for w in self.query("Input, Select, Checkbox, Button, DataTable")
+                     if w.focusable), None)
 
     def val(self, wid: str) -> str:
         return self.query_one(f"#{wid}", Input).value.strip()
@@ -249,6 +340,7 @@ class Pane(VerticalScroll):
             w.border_title = w.border_title or "Status"
         for w in self.query(RichLog).filter(".out"):
             w.border_title = w.border_title or "Output"
+            w.can_focus = False
         for w in self.query(DataTable).filter(".results"):
             w.border_title = w.border_title or "Results"
         self.refresh_info()

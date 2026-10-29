@@ -10,7 +10,7 @@ from textual.containers import Grid, Horizontal
 from textual.widgets import Button, Checkbox, DataTable, Input, Select, Static
 
 from .. import firewall as fw
-from .base import Pane, row, section
+from .base import NavTable, Pane, row, section
 
 VERDICT_STYLE = {"accept": "bold green", "drop": "bold red", "reject": "bold red"}
 REACH_STYLE = {"open": "green", "restricted": "yellow", "BLOCKED": "bold red", "localhost only": "dim",
@@ -45,14 +45,14 @@ class FirewallPane(Pane):
             yield Button("Close port", id="fw-close", variant="error")
             yield Button("Refresh", id="fw-refresh")
         yield from section("Rules", "Everything that currently allows or blocks a port. Select a row to remove it.")
-        t = DataTable(id="fw-rules", classes="results", cursor_type="row")
+        t = NavTable(id="fw-rules", classes="results", cursor_type="row")
         t.add_columns("action", "ports", "proto", "via", "zone / chain", "source", "saved")
         yield t
         with Horizontal(classes="buttons"):
             yield Button("Remove selected rule", id="fw-del", variant="error")
         yield from section("Listening on this host", "What is actually listening, and whether the firewall "
                                                     "lets it through. Select a row to open it.")
-        t2 = DataTable(id="fw-listen", classes="results", cursor_type="row")
+        t2 = NavTable(id="fw-listen", classes="results", cursor_type="row")
         t2.add_columns("port", "proto", "process", "bound to", "firewall")
         yield t2
         with Horizontal(classes="buttons"):

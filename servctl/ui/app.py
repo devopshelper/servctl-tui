@@ -15,6 +15,7 @@ from textual.containers import Horizontal
 from textual.screen import Screen
 from textual.widgets import ContentSwitcher, Footer, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
+from textual.widgets._select import SelectOverlay
 
 from .. import __version__
 from ..config import Config
@@ -22,7 +23,7 @@ from ..core import Step, is_root, os_info, run_plan
 from ..registry import BUILTIN, CATEGORIES, Module, load_plugins, resolve_enabled
 from .admin import (CleanupPane, JournaldPane, LogrotatePane, OverviewPane, SiemPane,
                     SyncthingPane)
-from .base import CSS, ConfirmScreen, Pane, PaneHeader
+from .base import CSS, ConfirmScreen, HelpScreen, Pane, PaneHeader
 from .firewall import FirewallPane
 from .mariadb import MariaDbPane
 from .fx import Activity, Brand, Splash, slide_in
@@ -44,7 +45,11 @@ class ServctlApp(App):
     CSS = CSS
     TITLE = "servctl"
     BINDINGS = [
+        Binding("tab", "switch_module(1)", "Next menu", priority=True),
+        Binding("shift+tab", "switch_module(-1)", "Prev menu", priority=True),
         Binding("escape", "focus_sidebar", "Menu"),
+        Binding("right", "enter_module", "Open", show=False),
+        Binding("f1", "help", "Help"),
         Binding("f2", "toggle_dry_run", "Dry-run"),
         Binding("f3", "toggle_log", "Log"),
         Binding("f4", "clear_log", "Clear log", show=False),
@@ -89,6 +94,7 @@ class ServctlApp(App):
         log = RichLog(id="log", wrap=True, markup=False, highlight=False, max_lines=5000,
                       classes="" if self.cfg.get("ui.show_log") else "hidden")
         log.border_title = "Activity log  (F3 hide · F4 clear)"
+        log.can_focus = False
         yield log
         yield Footer()
 
@@ -171,10 +177,17 @@ class ServctlApp(App):
     async def _selected(self, event: OptionList.OptionSelected) -> None:
         # Enter on a menu entry jumps into that module's first field.
         if event.option.id:
-            pane = await self.show(event.option.id)
-            if pane is not None:
-                target = next(iter(pane.query("Input, Select, Checkbox, Button, DataTable")), None)
-                (target or pane).focus()
+            await self._focus_module(event.option.id)
+
+    async def _focus_module(self, mid: str) -> None:
+        pane = await self.show(mid)
+        if pane is not None:
+            target = pane.first_field()
+            if target is not None:
+                target.focus()
+            else:
+                self.notify("Nothing to edit here - use PageUp/PageDown to scroll, Tab for the next menu.",
+                            timeout=3)
 
     async def show(self, mid: str) -> Optional[Pane]:
         """Switch the content area to a module, building it on first use.
@@ -308,6 +321,38 @@ class ServctlApp(App):
 
     def action_focus_sidebar(self) -> None:
         self.query_one("#sidebar").focus()
+
+    async def action_switch_module(self, step: int) -> None:
+        """Tab / Shift+Tab: next or previous menu entry, from anywhere on the main screen."""
+        if self.screen is not self.screen_stack[0]:
+            # Dialogs and the command palette keep the usual Tab behaviour.
+            (self.screen.focus_next if step > 0 else self.screen.focus_previous)()
+            return
+        if isinstance(self.focused, SelectOverlay):
+            return
+        sidebar = self.query_one("#sidebar", OptionList)
+        ids = [sidebar.get_option_at_index(i).id for i in range(sidebar.option_count)]
+        ids = [i for i in ids if i]
+        if not ids:
+            return
+        current = self.query_one("#content", ContentSwitcher).current or ""
+        cur = current[len("mod-"):] if current.startswith("mod-") else ids[0]
+        nxt = ids[(ids.index(cur) + step) % len(ids)] if cur in ids else ids[0]
+        sidebar.highlighted = sidebar.get_option_index(nxt)
+        sidebar.focus()
+
+    async def action_enter_module(self) -> None:
+        """Right arrow in the menu opens the module (elsewhere it is handled by the pane)."""
+        if self.focused is self.query_one("#sidebar"):
+            sidebar = self.query_one("#sidebar", OptionList)
+            if sidebar.highlighted is not None:
+                mid = sidebar.get_option_at_index(sidebar.highlighted).id
+                if mid:
+                    await self._focus_module(mid)
+
+    def action_help(self) -> None:
+        if not isinstance(self.screen, HelpScreen):
+            self.push_screen(HelpScreen())
 
     def action_toggle_dry_run(self) -> None:
         self.dry_run = not self.dry_run

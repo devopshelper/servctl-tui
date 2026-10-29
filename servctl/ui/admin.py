@@ -35,7 +35,7 @@ class OverviewPane(Pane):
             yield _card("Services", "ov-svc")
             yield _card("Load & memory", "ov-mem")
             yield _card("Disks", "ov-disks")
-        yield Static("F5 refresh  ·  Ctrl+P command palette  ·  Esc back to the menu  ·  F2 dry-run",
+        yield Static("Tab next menu  ·  Enter open  ·  Up/Down fields  ·  Esc menu  ·  F1 all keys",
                      classes="hint")
 
     def on_mount(self) -> None:

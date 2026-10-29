@@ -67,14 +67,19 @@ Ookla CLI are installed from inside the app when you need them.
 
 | Key | Action |
 |---|---|
-| ↑/↓ in sidebar | switch module |
-| Enter | jump into the module's first field |
+| **Tab / Shift+Tab** | next / previous menu - works from anywhere |
+| ↑ / ↓ | move in the menu, or between fields inside a screen |
+| Enter or → (in the menu) | jump into the screen |
 | Esc | back to the menu |
-| Tab / Shift+Tab | move between fields |
+| ← / → | between buttons and checkboxes (in text fields: move the cursor) |
+| Enter | text field: next field · button: press · dropdown: open |
+| Space | toggle checkbox · open dropdown |
+| ↑ / ↓ in a table | rows; leaves the table at the first/last row |
+| PageUp / PageDown | scroll the screen |
+| F1 | all keys |
 | Ctrl+P | command palette (jump to any module, change theme) |
 | F2 | toggle dry-run / live |
-| F3 | show/hide the log panel |
-| F4 | clear log |
+| F3 / F4 | show/hide · clear the activity log |
 | F5 | refresh the current screen |
 | Ctrl+Q | quit |
 

@@ -12,7 +12,7 @@ from textual.widgets import Button, Checkbox, DataTable, Input, RichLog, Rule, S
 
 from .. import bench, dnsutil, maildns, unbound
 from ..core import Step, capture, os_info, which
-from .base import Pane, cmd_block, row, section
+from .base import NavTable, Pane, cmd_block, row, section
 from .fx import count_up
 
 
@@ -43,7 +43,7 @@ class SpeedtestPane(Pane):
             yield Button("Run speed test", id="sp-run", variant="primary")
             yield Button("Install Ookla CLI", id="sp-install")
         yield from section("History (this session)")
-        t = DataTable(id="sp-hist", classes="results", cursor_type="row")
+        t = NavTable(id="sp-hist", classes="results", cursor_type="row")
         t.add_columns("time", "engine", "ping ms", "jitter", "down Mbit/s", "up Mbit/s", "server")
         yield t
 
@@ -112,7 +112,7 @@ class DiskPane(Pane):
         with Horizontal(classes="buttons"):
             yield Button("Run benchmark", id="dk-run", variant="primary")
             yield Button("Install fio", id="dk-install")
-        t = DataTable(id="dk-table", classes="results", cursor_type="row")
+        t = NavTable(id="dk-table", classes="results", cursor_type="row")
         t.add_columns("test", "MB/s", "IOPS", "avg latency µs", "p99 latency µs")
         yield t
 
@@ -318,7 +318,7 @@ class DnsBenchPane(Pane):
             yield Button("Run benchmark", id="db-run", variant="primary")
             yield Button("Use selected as system DNS", id="db-use")
             yield Button("Restore system DNS", id="db-restore")
-        t = DataTable(id="db-table", classes="results", cursor_type="row")
+        t = NavTable(id="db-table", classes="results", cursor_type="row")
         t.add_columns("#", "resolver", "address", "cached ms", "uncached ms", "reliable",
                       "DNSSEC", "Spamhaus")
         yield t

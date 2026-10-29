@@ -13,7 +13,7 @@ from textual.widgets import Button, Checkbox, DataTable, Input, Select, Static
 from .. import mariadb as m
 from ..core import os_info
 from ..sysinfo import human
-from .base import Pane, row, section
+from .base import NavTable, Pane, row, section
 
 
 def _names(text: str) -> List[str]:
@@ -44,7 +44,7 @@ class MariaDbPane(Pane):
                                           id="my-charset"))
         with Horizontal(classes="buttons"):
             yield Button("Create database(s)", id="my-dbcreate", variant="success")
-        t = DataTable(id="my-dbs", classes="results", cursor_type="row")
+        t = NavTable(id="my-dbs", classes="results", cursor_type="row")
         t.add_columns("database", "charset", "tables", "size", "users with access")
         yield t
         yield row("Type name to drop", Input(placeholder="safety check: the selected database's name",
@@ -62,7 +62,7 @@ class MariaDbPane(Pane):
             yield Button("Generate password", id="my-gen")
             yield Button("Create user", id="my-usercreate", variant="success")
             yield Button("Drop selected user", id="my-userdrop", variant="error")
-        t = DataTable(id="my-users", classes="results", cursor_type="row")
+        t = NavTable(id="my-users", classes="results", cursor_type="row")
         t.add_columns("user", "host", "auth", "databases")
         yield t
 
@@ -76,7 +76,7 @@ class MariaDbPane(Pane):
         with Horizontal(classes="buttons"):
             yield Button("Grant", id="my-grant", variant="success")
             yield Button("Revoke", id="my-revoke", variant="error")
-        t = DataTable(id="my-grants", classes="results", cursor_type="row")
+        t = NavTable(id="my-grants", classes="results", cursor_type="row")
         t.add_columns("user", "host", "database", "privileges", "grant option")
         yield t
 
