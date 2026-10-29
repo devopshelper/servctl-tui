@@ -13,6 +13,7 @@ from textual.widgets import Button, Checkbox, DataTable, Input, RichLog, Rule, S
 from .. import bench, dnsutil, maildns, unbound
 from ..core import Step, capture, os_info, which
 from .base import Pane, cmd_block, row, section
+from .fx import count_up
 
 
 def _fmt_ms(v: Optional[float]) -> str:
@@ -61,7 +62,7 @@ class SpeedtestPane(Pane):
             self.app.notify("No speedtest CLI installed - use 'Install Ookla CLI' or the built-in engine",
                             severity="warning")
             return
-        self.query_one("#sp-result", Static).update("Running…")
+        self.query_one("#sp-result", Static).update("Running...")
         url = self.app.cfg.get("speedtest.url")
         fn = (lambda emit: bench.cloudflare_speedtest(url, down, up, streams, emit)) if engine == "cf" \
             else bench.ookla_speedtest
@@ -71,10 +72,17 @@ class SpeedtestPane(Pane):
         if r is None:
             self.query_one("#sp-result", Static).update("Test failed - see log (F3).")
             return
-        self.query_one("#sp-result", Static).update(Text(
-            f"↓ {r.down_mbps:,.1f} Mbit/s    ↑ {r.up_mbps:,.1f} Mbit/s    "
-            f"ping {r.ping_ms:.1f} ms (jitter {r.jitter_ms:.1f})\n"
-            f"{r.engine} · {r.server} · public IP {r.ip or '?'} {r.extra}"))
+        def render(p: float) -> Text:
+            t = Text()
+            t.append("  DOWN ", style="bold reverse green")
+            t.append(f" {r.down_mbps * p:>9,.1f} Mbit/s    ", style="bold green")
+            t.append("  UP ", style="bold reverse cyan")
+            t.append(f" {r.up_mbps * p:>9,.1f} Mbit/s    ", style="bold cyan")
+            t.append("  PING ", style="bold reverse yellow")
+            t.append(f" {r.ping_ms * p:>6.1f} ms  (jitter {r.jitter_ms * p:.1f})\n\n", style="bold yellow")
+            t.append(f"{r.engine}  ·  {r.server}  ·  public IP {r.ip or '?'}  {r.extra}", style="dim")
+            return t
+        count_up(self.query_one("#sp-result", Static), render)
         self.query_one("#sp-hist", DataTable).add_row(
             time.strftime("%H:%M:%S"), r.engine, f"{r.ping_ms:.1f}", f"{r.jitter_ms:.1f}",
             f"{r.down_mbps:.1f}", f"{r.up_mbps:.1f}", r.server)
@@ -94,7 +102,7 @@ class DiskPane(Pane):
         yield from section("Disk benchmark",
                            "CrystalDiskMark-style fio tests with O_DIRECT (bypasses page cache). "
                            "A temporary file is written in the target directory and removed after.")
-        yield Static("loading…", id="dk-info", classes="info")
+        yield Static("loading...", id="dk-info", classes="info")
         yield row("Target directory", Input(cfg.get("disk.dir"), id="dk-dir"))
         yield row("Test file size", Input(cfg.get("disk.size"), id="dk-size"))
         yield row("Seconds per test", Input(str(cfg.get("disk.runtime")), id="dk-runtime", type="integer"))
@@ -298,7 +306,7 @@ class DnsBenchPane(Pane):
         yield from section("Find the best DNS resolver for this network",
                            "Measures cached and uncached (full recursion) lookup time, reliability, "
                            "DNSSEC validation, and whether Spamhaus answers through that resolver.")
-        yield Static("loading…", id="db-info", classes="info")
+        yield Static("loading...", id="db-info", classes="info")
         with Grid(classes="checks"):
             yield Checkbox("Public resolvers", True, id="db-public")
             yield Checkbox("Current system resolvers", True, id="db-system")
@@ -393,7 +401,7 @@ class UnboundPane(Pane):
                            "Resolves from the root servers itself (no forwarders), validates "
                            "DNSSEC, and keeps root hints fresh with a monthly timer. Spamhaus and "
                            "other DNS blocklists answer it, unlike big public resolvers.")
-        yield Static("loading…", id="ub-info", classes="info")
+        yield Static("loading...", id="ub-info", classes="info")
         yield row("Port", Input("53", id="ub-port", type="integer"))
         yield row("Cache size (MB)", Input("128", id="ub-cache", type="integer"))
         yield row("Threads", Input("0", id="ub-threads", type="integer"))
@@ -446,7 +454,7 @@ class UnboundPane(Pane):
 
         def show(results):
             for ok, msg in results or []:
-                out.write(Text(("✔ " if ok else "✖ ") + msg, style="green" if ok else "red"))
+                out.write(Text(("[ OK ] " if ok else "[FAIL] ") + msg, style="green" if ok else "red"))
         self.task("Unbound self-test", lambda emit: unbound.self_test(int(port)), show)
 
     @on(Button.Pressed, "#ub-flush")
@@ -462,8 +470,9 @@ class UnboundPane(Pane):
 # Mail DNS
 # --------------------------------------------------------------------------- #
 
-_STYLE = {maildns.OK: ("✔", "green"), maildns.WARN: ("⚠", "yellow"),
-          maildns.FAIL: ("✖", "red"), maildns.INFO: ("ℹ", "cyan")}
+# Plain ASCII tags render in every terminal font (no tofu boxes).
+_STYLE = {maildns.OK: ("[ OK ]", "green"), maildns.WARN: ("[WARN]", "yellow"),
+          maildns.FAIL: ("[FAIL]", "red"), maildns.INFO: ("[INFO]", "cyan")}
 
 
 class MailDnsPane(Pane):

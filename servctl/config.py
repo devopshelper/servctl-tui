@@ -21,6 +21,10 @@ DEFAULTS: Dict[str, Any] = {
         "enabled": None,
     },
     "ui": {
+        "theme": "tokyo-night",
+        "colors": "auto",        # auto | 16 | 256 | truecolor
+        "animations": True,
+        "splash": True,
         "dry_run": False,
         "show_log": False,
     },

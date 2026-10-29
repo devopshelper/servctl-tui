@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import os
-import platform
 from pathlib import Path
-
 
 from rich.text import Text
 from textual import on, work
@@ -12,43 +10,97 @@ from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal
 from textual.widgets import Button, Checkbox, Input, Rule, Select, Static
 
-from .. import cleanup, logs, siem, syncthing
+from .. import cleanup, logs, siem, syncthing, sysinfo
 from ..core import (capture, default_user, is_root, os_info, read_text, selinux_enforcing,
                     tcp_check, which)
 from .base import Pane, cmd_block, row, section
 
 
+SERVICES = ["sshd", "firewalld", "rsyslog", "systemd-journald", "chronyd", "unbound", "docker",
+            "podman", "NetworkManager", "systemd-resolved"]
+
+
+def _card(title: str, cid: str) -> Static:
+    w = Static("loading...", id=cid, classes="card")
+    w.border_title = title
+    return w
+
+
 class OverviewPane(Pane):
+    """Dashboard of cards that refreshes itself every few seconds while visible."""
+
     def compose(self) -> ComposeResult:
-        yield from section("Host overview", "F5 refreshes the current screen · Ctrl+P opens the command palette.")
-        yield Static("loading…", id="ov-info", classes="info")
+        with Grid(id="ov-grid"):
+            yield _card("Host", "ov-host")
+            yield _card("Services", "ov-svc")
+            yield _card("Load & memory", "ov-mem")
+            yield _card("Disks", "ov-disks")
+        yield Static("F5 refresh  ·  Ctrl+P command palette  ·  Esc back to the menu  ·  F2 dry-run",
+                     classes="hint")
+
+    def on_mount(self) -> None:
+        self.set_interval(5, self._auto)
+
+    def _auto(self) -> None:
+        if self.display and self.app.screen is self.screen:
+            self.refresh_info()
 
     @work(thread=True, exclusive=True)
     def refresh_info(self) -> None:
-        osi = os_info()
-        lines = [
-            f"Host     : {platform.node()}",
-            f"OS       : {osi.pretty}   kernel {platform.release()}",
-            f"Uptime   : {capture(['uptime', '-p'])[1]}",
-            f"Running as {'root' if is_root() else 'NON-ROOT (changes need sudo)'}"
-            f"   SELinux: {capture(['getenforce'])[1] if which('getenforce') else 'n/a'}",
-            "",
-        ]
-        svc = ["docker", "podman", "rsyslog", "systemd-journald", "firewalld"]
-        states = []
-        for s in svc:
-            rc, out = capture(["systemctl", "is-active", s], 5)
-            states.append(f"{s}={out.splitlines()[-1] if out else '?'}")
-        lines.append("Services : " + "  ".join(states))
-        rc, out = capture(["systemctl", "list-units", "syncthing@*", "--no-legend", "--plain"], 5)
-        lines.append("Syncthing: " + (", ".join(l.split()[0] + "=" + l.split()[2]
-                                               for l in out.splitlines() if l.strip()) or "none"))
-        lines.append("")
-        lines.append(cmd_block(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "overlay",
-                                 "-x", "squashfs"], "disk"))
-        lines.append(cmd_block(["free", "-h"], "memory"))
-        lines.append(cmd_block(["journalctl", "--disk-usage"], "journal"))
-        self.set_info("ov-info", "\n".join(lines))
+        h = sysinfo.host_summary()
+        se = capture(["getenforce"])[1] if which("getenforce") else "n/a"
+        host = Text()
+        for k, v in (("host", h["host"]), ("os", h["os"]), ("kernel", f"{h['kernel']} ({h['arch']})"),
+                     ("uptime", sysinfo.uptime()), ("selinux", se),
+                     ("user", "root" if is_root() else "non-root (dry-run only)")):
+            host.append(f"{k:<8}", style="dim")
+            host.append(f"{v}\n")
+        self.ui(self.query_one("#ov-host", Static).update, host)
+
+        l1, l5, l15 = sysinfo.load()
+        cpus = os.cpu_count() or 1
+        used, total, sused, stotal = sysinfo.memory()
+        mem = Text()
+        lp = 100 * l1 / cpus
+        mem.append(f"{'load':<6}", style="dim")
+        mem.append(f"{l1:.2f} {l5:.2f} {l15:.2f}", style=sysinfo.pct_color(lp))
+        mem.append(f"  ({cpus} CPUs)\n", style="dim")
+        self._bar(mem, "cpu", lp, f"1-min load vs {cpus} CPUs")
+        self._bar(mem, "mem", 100 * used / total if total else 0,
+                  f"{sysinfo.human(used)} / {sysinfo.human(total)}")
+        if stotal:
+            self._bar(mem, "swap", 100 * sused / stotal, f"{sysinfo.human(sused)} / {sysinfo.human(stotal)}")
+        self.ui(self.query_one("#ov-mem", Static).update, mem)
+
+        dk = Text()
+        for d in sysinfo.disks()[:8]:
+            mount = d.mount if len(d.mount) <= 18 else "~" + d.mount[-17:]
+            self._bar(dk, mount, d.pct, f"{sysinfo.human(d.used)} / {sysinfo.human(d.total)}  {d.fstype}",
+                      width=30, label_w=19)
+        self.ui(self.query_one("#ov-disks", Static).update, dk if dk.plain else Text("no disks found"))
+
+        states = sysinfo.services(SERVICES)
+        failed = sysinfo.failed_units()
+        sv = Text()
+        shown = [(n, st) for n, st in states.items() if st not in ("inactive", "unknown")] or list(states.items())
+        for name, st in shown:
+            mark, style = {"active": ("[ up ]", "green"), "failed": ("[FAIL]", "bold red"),
+                           "activating": ("[ .. ]", "yellow")}.get(st, ("[ -- ]", "dim"))
+            sv.append(mark + " ", style=style)
+            sv.append(f"{name}\n")
+        sv.append(f"\n{len(failed)} failed unit(s)", style="bold red" if failed else "green")
+        if failed:
+            sv.append(": " + ", ".join(failed[:5]), style="red")
+        self.ui(self.query_one("#ov-svc", Static).update, sv)
+
+    @staticmethod
+    def _bar(t: Text, label: str, pct: float, detail: str, width: int = 30, label_w: int = 6) -> None:
+        full, empty = sysinfo.bar(pct, width)
+        t.append(f"{label:<{label_w}}", style="dim")
+        t.append(full, style=sysinfo.pct_color(pct))
+        t.append(empty, style="dim")
+        t.append(f" {pct:>3.0f}%  ", style="bold " + sysinfo.pct_color(pct))
+        t.append(detail + "\n", style="dim")
 
 
 class CleanupPane(Pane):
@@ -57,14 +109,14 @@ class CleanupPane(Pane):
         yield from section(f"Containers ({engine or 'docker/podman not found'})",
                            "Prunes only what is not used by any container. Volumes hold data: "
                            "off by default.")
-        yield Static("loading…", id="cl-df", classes="info")
+        yield Static("loading...", id="cl-df", classes="info")
         with Grid(classes="checks"):
             yield Checkbox("Stopped containers", True, id="cl-containers")
             yield Checkbox("Dangling images", True, id="cl-images")
             yield Checkbox("ALL unused images", False, id="cl-allimages")
             yield Checkbox("Unused networks", True, id="cl-networks")
             yield Checkbox("Unused volumes", False, id="cl-volumes")
-            yield Checkbox("…incl. named volumes", False, id="cl-allvolumes")
+            yield Checkbox("...incl. named volumes", False, id="cl-allvolumes")
             yield Checkbox("Build cache", True, id="cl-build")
         yield row("Only older than", Input(placeholder="e.g. 24h (blank = everything)",
                                            id="cl-until"))
@@ -74,7 +126,7 @@ class CleanupPane(Pane):
 
         yield Rule()
         yield from section("Host housekeeping")
-        yield Static("loading…", id="cl-du", classes="info")
+        yield Static("loading...", id="cl-du", classes="info")
         with Grid(classes="checks"):
             yield Checkbox("Package cache", True, id="cl-pkg")
             yield Checkbox("Orphaned packages", False, id="cl-autoremove")
@@ -128,7 +180,7 @@ class LogrotatePane(Pane):
         yield from section("Per-application rule (/etc/logrotate.d)",
                            "Pick an existing file to change its retention (paths and "
                            "postrotate scripts are kept), or create a new rule.")
-        yield row("Rule file", Select([("➕ new rule", NEW)], value=NEW, allow_blank=False,
+        yield row("Rule file", Select([("+ new rule", NEW)], value=NEW, allow_blank=False,
                                       id="lr-file"))
         yield row("Name", Input(placeholder="myapp", id="lr-name"))
         yield row("Log paths", Input(placeholder="/var/log/myapp/*.log /opt/app/logs/*.log",
@@ -172,7 +224,7 @@ class LogrotatePane(Pane):
             files = sorted(p.name for p in Path(logs.LOGROTATE_DIR).iterdir() if p.is_file())
         except OSError:
             files = []
-        sel.set_options([("➕ new rule", NEW)] + [(f, f) for f in files])
+        sel.set_options([("+ new rule", NEW)] + [(f, f) for f in files])
         sel.value = current if current in files else NEW
         self._load_rule()
         conf = read_text(logs.LOGROTATE_CONF)
@@ -240,7 +292,7 @@ class LogrotatePane(Pane):
 class JournaldPane(Pane):
     def compose(self) -> ComposeResult:
         yield from section("Current journal", "")
-        yield Static("loading…", id="jd-info", classes="info")
+        yield Static("loading...", id="jd-info", classes="info")
         yield from section("Persistent limits",
                            f"Written to {logs.JOURNALD_DROPIN}; journald is restarted. "
                            "Blank fields are left at the system default.")
@@ -298,7 +350,7 @@ class SyncthingPane(Pane):
                            "Runs as syncthing@<user>.service. By default the web GUI only "
                            "listens on localhost - reach it with an SSH tunnel: "
                            "ssh -L 8384:localhost:8384 <server>")
-        yield Static("loading…", id="st-info", classes="info")
+        yield Static("loading...", id="st-info", classes="info")
         yield row("Run as user", Input(default_user(), id="st-user"))
         yield row("Install method", Select(
             [("EPEL package (dnf)", "epel"), ("Upstream binary from GitHub", "upstream")],
@@ -350,7 +402,7 @@ class SiemPane(Pane):
         yield from section("Forward logs to a SIEM with rsyslog",
                            f"Config goes to {siem.CONF_PATH}. Logs are buffered on disk while "
                            "the SIEM is unreachable and keep being written locally.")
-        yield Static("loading…", id="sm-info", classes="info")
+        yield Static("loading...", id="sm-info", classes="info")
         yield row("SIEM host", Input(placeholder="siem.example.com or 10.0.0.5", id="sm-host"))
         yield row("Protocol", Select([("TCP", "tcp"), ("TLS (TCP + certificates)", "tls"),
                                       ("UDP (may lose messages)", "udp")],

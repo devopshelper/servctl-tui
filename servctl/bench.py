@@ -270,7 +270,7 @@ def run_fio(tests: List[DiskTest], directory: str, size: str, runtime: int,
     direct = True
     try:
         for t in tests:
-            emit(f"{t.label}: running {runtime}s…", "")
+            emit(f"{t.label}: running {runtime}s...", "")
             argv = fio_argv(t, directory, size, runtime, filename, direct)
             rc, out = capture(argv, timeout=runtime * 3 + 600)
             if rc != 0 and direct and ("direct" in out.lower() or "Invalid argument" in out):
@@ -307,7 +307,7 @@ def run_dd(directory: str, size: str, emit: Emit,
                                   "oflag=direct", "conv=fdatasync"]),
             ("SEQ1M read (dd)", ["dd", f"if={path}", "of=/dev/null", "bs=1M", "iflag=direct"]),
         ):
-            emit(f"{label}…", "")
+            emit(f"{label}...", "")
             rc, out = capture(argv, timeout=1800)
             m = re.search(r"copied,\s*([\d.]+)\s*s", out)
             if rc == 0 and m:

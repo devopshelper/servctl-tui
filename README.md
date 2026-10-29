@@ -52,12 +52,34 @@ Ookla CLI are installed from inside the app when you need them.
 | Key | Action |
 |---|---|
 | ↑/↓ in sidebar | switch module |
-| Ctrl+P | command palette (jump to any module) |
+| Enter | jump into the module's first field |
+| Esc | back to the menu |
+| Tab / Shift+Tab | move between fields |
+| Ctrl+P | command palette (jump to any module, change theme) |
 | F2 | toggle dry-run / live |
 | F3 | show/hide the log panel |
 | F4 | clear log |
 | F5 | refresh the current screen |
 | Ctrl+Q | quit |
+
+## Appearance
+
+- Themes: pick one in **Settings** (live preview) or Ctrl+P > *Change theme*.
+  Default is `tokyo-night`.
+- Animations: shimmering gradient wordmark, a short splash, a bouncing activity
+  indicator in the top bar while anything runs, slide-in when opening a module,
+  and count-up speed test results. Turn them off in Settings (`ui.animations`)
+  for slow SSH links.
+- Only classic terminal characters are drawn (ASCII, `┌─┐│`, `░▒▓█`), so it
+  renders in PuTTY, Windows consoles and minimal fonts without `□` boxes.
+
+### Colours look washed out or basic?
+
+PuTTY and some SSH clients send `TERM=xterm`, which limits apps to 16 colours.
+servctl upgrades plain `xterm` to 256 colours automatically (`ui.colors: auto`).
+You can force a mode in Settings or the config (`16`, `256`, `truecolor`). In
+PuTTY, setting *Connection > Data > Terminal-type string* to `xterm-256color`
+fixes it for every app.
 
 ## Configuration
 
@@ -68,6 +90,10 @@ Ookla CLI are installed from inside the app when you need them.
 modules:
   enabled: [overview, cleanup, journald, unbound, maildns, dnsbench, settings]
 ui:
+  theme: tokyo-night
+  colors: auto          # auto | 16 | 256 | truecolor
+  animations: true
+  splash: true
   dry_run: false
   show_log: false
 speedtest: {url: https://speed.cloudflare.com, download_mb: 100, upload_mb: 25, streams: 4}

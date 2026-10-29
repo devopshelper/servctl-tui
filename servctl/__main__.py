@@ -1,8 +1,27 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 from . import __version__
+
+
+def apply_color_mode(mode: str) -> None:
+    """Pick the colour depth before Textual creates its console.
+
+    PuTTY and many SSH clients send TERM=xterm, which makes Rich fall back to
+    16 colours even though the terminal can do far more.
+    """
+    if mode == "truecolor":
+        os.environ["COLORTERM"] = "truecolor"
+    elif mode == "256":
+        os.environ.pop("COLORTERM", None)
+        os.environ["TERM"] = "xterm-256color"
+    elif mode == "16":
+        os.environ.pop("COLORTERM", None)
+        os.environ["TERM"] = "xterm"
+    elif os.environ.get("TERM") == "xterm" and not os.environ.get("COLORTERM"):
+        os.environ["TERM"] = "xterm-256color"
 
 
 def main() -> None:
@@ -27,6 +46,7 @@ def main() -> None:
             print(f"{'*' if on else ' '} {m.id:<10} {m.category:<9} {m.description}")
         return
 
+    apply_color_mode(cfg.get("ui.colors") or "auto")
     pinned = [x.strip() for x in args.modules.split(",") if x.strip()] if args.modules else None
     if pinned:
         unknown = [p for p in pinned if p not in {m.id for m in BUILTIN}]

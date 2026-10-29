@@ -1,4 +1,11 @@
-"""Shared UI building blocks: CSS, Pane base class, confirmation dialog."""
+"""Shared UI building blocks: theme CSS, Pane base class, confirmation dialog.
+
+Glyph policy: only characters from the classic terminal sets (CP437/WGL4) are
+used - box lines like ┌─┐, shades ░▒▓█ and ASCII - so the UI renders on
+PuTTY, Windows consoles and minimal fonts without "tofu" boxes. Textual's
+default widget borders use eighth-block glyphs (▊▔▎), so every widget runs in
+compact mode and all borders are 'solid'.
+"""
 from __future__ import annotations
 
 import threading
@@ -10,39 +17,103 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, Label, Select, Static
+from textual.scrollbar import ScrollBarRender
+from textual.widgets import Button, Checkbox, DataTable, Input, Label, RichLog, Select, Static
 
 from ..core import Step, capture, is_root
 
+# Whole-cell scrollbars: the smooth ones use ▁▂▃ / ▉▊▋ partial blocks.
+ScrollBarRender.VERTICAL_BARS = [" "] * 8
+ScrollBarRender.HORIZONTAL_BARS = [" "] * 8
+
 CSS = """
-Screen { layout: vertical; }
+Screen { layout: vertical; background: $background; }
+
+/* ---------- top bar ---------- */
+#topbar { dock: top; height: 1; background: $panel; }
+#brand { width: auto; padding: 0 1; text-style: bold; }
+#hostinfo { width: 1fr; color: $text-muted; padding: 0 1; }
+#activity { width: auto; padding: 0 1; color: $accent; }
+#mode { width: auto; padding: 0 1; text-style: bold; }
+#mode.dry { background: $warning; color: $background; }
+#mode.live { background: $error; color: $text; }
+#clock { width: auto; padding: 0 1; color: $text-muted; }
+
+/* ---------- layout ---------- */
 #body { height: 1fr; }
-#sidebar { width: 26; border-right: tall $primary-darken-2; }
+#sidebar { width: 28; height: 100%; max-height: 100%; border: none; border-right: solid $primary 40%; background: $panel;
+           padding: 1 0; }
+#sidebar:focus { border-right: solid $accent; }
+#sidebar > .option-list--option-highlighted { background: $primary 50%; text-style: bold; }
+#sidebar:focus > .option-list--option-highlighted { background: $accent; color: $background; }
+#sidebar > .option-list--option-hover { background: $primary 20%; }
 #content { width: 1fr; }
 #content > * { height: 1fr; }
-#log { height: 12; border: round $accent; }  /* hidden until an action runs; F3 toggles */
+#log { height: 12; border: solid $accent 50%; background: transparent; }
 #log.hidden { display: none; }
-.pane { padding: 0 1; }
-.section { text-style: bold; color: $accent; margin: 1 0 0 0; }
-.hint { color: $text-muted; margin: 0 0 1 0; }
-.row { height: auto; }
-.row > .lbl { width: 24; padding: 1 1 0 0; }
-.row > Input, .row > Select { width: 1fr; max-width: 60; }
-.checks { layout: grid; grid-size: 3; grid-rows: 3; height: auto; grid-gutter: 0 1; }
-.buttons { height: auto; margin: 1 0; }
-.buttons Button { margin: 0 1 0 0; }
-.info { border: round $primary-darken-2; padding: 0 1; height: auto; max-height: 20;
-        overflow-y: auto; }
-.warn { color: $warning; text-style: bold; }
-.out { height: 16; border: round $primary-darken-2; }
-.big { text-style: bold; padding: 1 2; border: round $success; height: auto; }
-DataTable.results { height: auto; max-height: 20; margin: 1 0; }
 
-ConfirmScreen { align: center middle; }
-#dialog { width: 90%; max-width: 120; height: 85%; border: thick $warning;
-          background: $surface; padding: 1 2; }
-#dialog-title { text-style: bold; }
-#dialog-plan { height: 1fr; border: round $primary-darken-2; margin: 1 0; }
+/* ---------- panes ---------- */
+.pane { padding: 0 2; }
+PaneHeader { height: auto; margin: 1 0 0 0; padding: 0 0 0 0; border-bottom: solid $accent 60%; }
+PaneHeader .ph-title { text-style: bold; color: $accent; }
+PaneHeader .ph-desc { color: $text-muted; }
+.section { text-style: bold; color: $text; margin: 1 0 0 0; border-bottom: solid $primary 30%; }
+.hint { color: $text-muted; margin: 0 0 1 0; }
+.row { height: auto; margin: 0 0 1 0; }
+.row > .lbl { width: 26; color: $text-muted; }
+.row > Input, .row > Select { width: 1fr; max-width: 64; }
+.checks { layout: grid; grid-size: 3; grid-rows: 1; height: auto; grid-gutter: 1 2; margin: 0 0 1 0; }
+.buttons { height: auto; margin: 1 0; }
+.buttons Button { margin: 0 2 0 0; }
+.info { border: solid $primary 40%; border-title-color: $accent; padding: 0 1; height: auto;
+        max-height: 20; overflow-y: auto; margin: 1 0 0 0; }
+.warn { color: $warning; text-style: bold; }
+.out { height: 16; border: solid $primary 40%; border-title-color: $accent; background: transparent; }
+.big { text-style: bold; padding: 1 2; border: solid $success; border-title-color: $success;
+       height: auto; margin: 1 0 0 0; }
+DataTable.results { height: auto; max-height: 20; margin: 1 0; border: solid $primary 40%; background: transparent;
+                    border-title-color: $accent; }
+
+/* ---------- overview dashboard ---------- */
+#ov-grid { layout: grid; grid-size: 2; grid-columns: 1fr 1fr; grid-gutter: 1 2; height: auto; margin: 1 0; }
+.card { border: solid $primary 50%; border-title-color: $accent; border-title-style: bold;
+        padding: 0 1; height: auto; min-height: 8; }
+#ov-mem, #ov-disks { column-span: 2; }
+
+/* ---------- compact widgets: give them a visible field background ---------- */
+Input.-textual-compact { background: $boost; }
+Input.-textual-compact:focus { background: $primary 25%; }
+Select.-textual-compact > SelectCurrent { background: $boost; }
+Select.-textual-compact:focus > SelectCurrent { background: $primary 25%; }
+SelectOverlay { border: solid $accent; }
+Checkbox.-textual-compact { background: transparent; }
+Checkbox.-textual-compact:focus { background: $primary 25%; }
+Button.-textual-compact { min-width: 10; padding: 0 2; background: $panel-lighten-2; color: auto 90%;
+                          text-style: bold; }
+Button.-textual-compact:hover { background: $panel-lighten-3; }
+Button.-textual-compact.-primary { background: $primary; color: auto 90%; }
+Button.-textual-compact.-success { background: $success; color: auto 90%; }
+Button.-textual-compact.-warning { background: $warning; color: auto 90%; }
+Button.-textual-compact.-error { background: $error; color: auto 90%; }
+Button.-textual-compact:focus { background: $accent; color: auto 90%; text-style: bold underline; }
+Button.-textual-compact:disabled { background: $panel; color: $text-disabled; text-style: none; }
+
+/* ---------- Textual built-ins that default to block-glyph borders ---------- */
+Toast { border-left: solid $success; }
+Toast.-information { border-left: solid $success; }
+Toast.-warning { border-left: solid $warning; }
+Toast.-error { border-left: solid $error; }
+FooterKey.-command-palette { border-left: solid $foreground 20%; }
+CommandPalette #--input { border: solid $accent; }
+CommandList { border: none; border-bottom: solid $primary 40%; }
+CommandList:focus { border: none; border-bottom: solid $primary 40%; }
+
+/* ---------- confirm dialog ---------- */
+ConfirmScreen { align: center middle; background: $background 60%; }
+#dialog { width: 90%; max-width: 120; height: 85%; border: double $warning;
+          border-title-color: $warning; border-title-style: bold; background: $surface; padding: 1 2; }
+#dialog.dry { border: double $primary; border-title-color: $primary; }
+#dialog-plan { height: 1fr; border: solid $primary 40%; margin: 1 0; padding: 0 1; }
 #dialog-buttons { height: auto; align-horizontal: right; }
 #dialog-buttons Button { margin-left: 2; }
 """
@@ -63,6 +134,23 @@ def section(title: str, hint: str = "") -> List[Static]:
     return out
 
 
+class PaneHeader(Vertical):
+    """Title + description shown at the top of every module."""
+
+    def __init__(self, title: str, description: str) -> None:
+        super().__init__()
+        self._title, self._desc = title, description
+
+    def compose(self) -> ComposeResult:
+        yield Static(self._title, classes="ph-title")
+        yield Static(self._desc, classes="ph-desc")
+
+
+def make_compact(root) -> None:
+    for w in root.query("Input, Select, Button, Checkbox"):
+        w.compact = True
+
+
 class ConfirmScreen(ModalScreen[bool]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
@@ -73,18 +161,28 @@ class ConfirmScreen(ModalScreen[bool]):
         self.dry_run = dry_run
 
     def compose(self) -> ComposeResult:
-        body = "\n\n".join(f"{i}. {s.title}{'  (failure tolerated)' if s.allow_fail else ''}\n"
-                           f"{s.describe()}" for i, s in enumerate(self.steps, 1))
-        mode = ("DRY-RUN: commands are only printed, nothing is changed." if self.dry_run else
-                "LIVE: these commands will run as " + ("root." if is_root() else "a non-root user!"))
-        with Vertical(id="dialog"):
-            yield Label(self.plan_title, id="dialog-title")
+        body = Text()
+        for i, s in enumerate(self.steps, 1):
+            body.append(f"{i:>2}. ", style="bold")
+            body.append(s.title, style="bold")
+            if s.allow_fail:
+                body.append("  (failure tolerated)", style="dim")
+            body.append("\n")
+            for line in s.describe().splitlines():
+                style = "green" if line.lstrip().startswith("$") else "dim" if "│" in line else ""
+                body.append("    " + line + "\n", style=style)
+            body.append("\n")
+        mode = ("DRY-RUN - commands are only printed, nothing is changed." if self.dry_run else
+                "LIVE - these commands will run as " + ("root." if is_root() else "a NON-ROOT user!"))
+        dialog = Vertical(id="dialog", classes="dry" if self.dry_run else "")
+        dialog.border_title = f" Review plan: {self.plan_title} "
+        with dialog:
             yield Label(mode, classes="hint" if self.dry_run else "warn")
             with VerticalScroll(id="dialog-plan"):
-                yield Static(Text(body))
+                yield Static(body)
             with Horizontal(id="dialog-buttons"):
-                yield Button("Cancel", id="no")
-                yield Button("Dry-run" if self.dry_run else "Run", id="yes",
+                yield Button("Cancel  [Esc]", id="no", compact=True)
+                yield Button("Dry-run" if self.dry_run else "Run it", id="yes", compact=True,
                              variant="primary" if self.dry_run else "error")
 
     def on_mount(self) -> None:
@@ -99,7 +197,7 @@ class ConfirmScreen(ModalScreen[bool]):
 
 
 class Pane(VerticalScroll):
-    """Base for each tab: value helpers, plan submission, async info refresh."""
+    """Base for each module: value helpers, plan submission, async info refresh."""
 
     DEFAULT_CLASSES = "pane"
 
@@ -146,6 +244,13 @@ class Pane(VerticalScroll):
         self.ui(self.query_one(f"#{wid}", Static).update, Text(text))
 
     def on_mount(self) -> None:
+        make_compact(self)
+        for w in self.query(".info"):
+            w.border_title = w.border_title or "Status"
+        for w in self.query(RichLog).filter(".out"):
+            w.border_title = w.border_title or "Output"
+        for w in self.query(DataTable).filter(".results"):
+            w.border_title = w.border_title or "Results"
         self.refresh_info()
 
     def refresh_info(self) -> None:  # overridden
@@ -155,5 +260,3 @@ class Pane(VerticalScroll):
 def cmd_block(argv: List[str], title: Optional[str] = None) -> str:
     rc, out = capture(argv)
     return f"── {title or ' '.join(argv)} ──\n{out}"
-
-
