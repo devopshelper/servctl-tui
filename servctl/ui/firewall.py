@@ -37,7 +37,7 @@ class FirewallPane(Pane):
                                                 id="fw-source"))
         yield row("Auto-close after (min)", Input(placeholder="blank = keep open (firewalld only)",
                                                   id="fw-timeout", type="integer"))
-        with Grid(classes="checks"):
+        with Grid(classes="checks two"):
             yield Checkbox("Keep after reboot", True, id="fw-perm")
             yield Checkbox("Allow changing my SSH port", False, id="fw-ssh")
         with Horizontal(classes="buttons"):

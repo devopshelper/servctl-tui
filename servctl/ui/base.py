@@ -137,6 +137,7 @@ Select.-textual-compact:focus > SelectCurrent { background: $primary 25%; }
 SelectOverlay { border: solid $accent; }
 Checkbox.-textual-compact { background: transparent; }
 .pane > Checkbox { margin: 0 0 1 0; }
+.checks.two { grid-size: 2; }
 Checkbox.-textual-compact:focus { background: $primary 25%; }
 Button.-textual-compact { min-width: 10; padding: 0 2; background: $panel-lighten-2; color: auto 90%;
                           text-style: bold; }
