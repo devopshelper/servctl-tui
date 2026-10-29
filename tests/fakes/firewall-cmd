@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Minimal stand-in for firewall-cmd used by the tests (state in $FAKE_FW_STATE)."""
+import json, os, sys
+
+SERVICES = {"ssh": ["22/tcp"], "http": ["80/tcp"], "https": ["443/tcp"], "cockpit": ["9090/tcp"],
+            "dhcpv6-client": ["546/udp"], "mysql": ["3306/tcp"]}
+path = os.environ["FAKE_FW_STATE"]
+st = json.load(open(path))
+args = sys.argv[1:]
+perm = "--permanent" in args
+args = [a for a in args if a != "--permanent"]
+zone = next((a.split("=", 1)[1] for a in args if a.startswith("--zone=")), st["default"])
+args = [a for a in args if not a.startswith("--zone=") and not a.startswith("--timeout=")]
+layer = st["permanent" if perm else "runtime"].setdefault(zone, {"ports": [], "services": [], "rich": []})
+
+def save():
+    json.dump(st, open(path, "w"))
+
+a = args[0] if args else ""
+if a == "--state":
+    print("running")
+elif a == "--get-default-zone":
+    print(st["default"])
+elif a == "--get-zones":
+    print(" ".join(sorted(st["zones"])))
+elif a == "--get-active-zones":
+    for z, d in st["zones"].items():
+        if d.get("interfaces"):
+            print(z); print("  interfaces: " + " ".join(d["interfaces"]))
+elif a.startswith("--info-service="):
+    name = a.split("=", 1)[1]
+    if name not in SERVICES:
+        print("Error: INVALID_SERVICE", file=sys.stderr); sys.exit(101)
+    print(name); print("  ports: " + " ".join(SERVICES[name])); print("  protocols: ")
+elif a == "--list-all":
+    active = " (active)" if st["zones"].get(zone, {}).get("interfaces") and not perm else ""
+    print(f"{zone}{active}")
+    print("  target: default")
+    print("  icmp-block-inversion: no")
+    print("  interfaces: " + " ".join(st["zones"].get(zone, {}).get("interfaces", [])))
+    print("  sources: ")
+    print("  services: " + " ".join(layer["services"]))
+    print("  ports: " + " ".join(layer["ports"]))
+    print("  protocols: ")
+    print("  forward: yes")
+    print("  masquerade: no")
+    print("  forward-ports: ")
+    print("  source-ports: ")
+    print("  icmp-blocks: ")
+    print("  rich rules: ")
+    for r in layer["rich"]:
+        print("\t" + r)
+elif a == "--reload":
+    st["runtime"] = json.loads(json.dumps(st["permanent"])); save(); print("success")
+else:
+    op, _, val = a.partition("=")
+    key = {"port": "ports", "service": "services", "rich-rule": "rich"}[op.split("-", 3)[-1]]
+    if op.startswith("--add-"):
+        if val in layer[key]:
+            print(f"Warning: ALREADY_ENABLED: {val}", file=sys.stderr)
+        else:
+            layer[key].append(val)
+    elif op.startswith("--remove-"):
+        if val not in layer[key]:
+            print(f"Warning: NOT_ENABLED: {val}", file=sys.stderr)
+        else:
+            layer[key].remove(val)
+    save(); print("success")

@@ -37,11 +37,13 @@ class Step:
     allow_fail: bool = False
     # Optional text shown instead of argv (used to hide secrets).
     display: Optional[str] = None
+    # Fed to the command on stdin - keeps secrets such as SQL passwords out of `ps`.
+    stdin: Optional[str] = None
 
     @classmethod
     def cmd(cls, title: str, *argv: str, allow_fail: bool = False,
-            display: Optional[str] = None) -> "Step":
-        return cls(title=title, argv=list(argv), allow_fail=allow_fail, display=display)
+            display: Optional[str] = None, stdin: Optional[str] = None) -> "Step":
+        return cls(title=title, argv=list(argv), allow_fail=allow_fail, display=display, stdin=stdin)
 
     @classmethod
     def sh(cls, title: str, script: str, allow_fail: bool = False) -> "Step":
@@ -99,17 +101,26 @@ def _atomic_write(path: Path, content: str, mode: int) -> None:
                        stderr=subprocess.DEVNULL, check=False)
 
 
-def _run_cmd(argv: List[str], emit: Emitter) -> int:
+def _run_cmd(argv: List[str], emit: Emitter, stdin: Optional[str] = None) -> int:
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                stdin=subprocess.DEVNULL, text=True, bufsize=1,
+                                stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+                                text=True, bufsize=1,
                                 env={**os.environ, "LC_ALL": "C", "DEBIAN_FRONTEND": "noninteractive"})
     except FileNotFoundError:
         emit(f"  command not found: {argv[0]}", "red")
         return 127
+    if stdin is not None:
+        assert proc.stdin is not None
+        try:
+            proc.stdin.write(stdin)
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
     assert proc.stdout is not None
-    for line in proc.stdout:
-        emit("  " + line.rstrip("\n"), "dim")
+    with proc.stdout:
+        for line in proc.stdout:
+            emit("  " + line.rstrip("\n"), "dim")
     return proc.wait()
 
 
@@ -133,7 +144,7 @@ def run_plan(steps: List[Step], emit: Emitter, dry_run: bool = False) -> bool:
         ok = True
         if step.argv is not None:
             emit("  " + step.describe().splitlines()[0], "")
-            rc = _run_cmd(step.argv, emit)
+            rc = _run_cmd(step.argv, emit, step.stdin)
             ok = rc == 0
             if not ok:
                 emit(f"  exit code {rc}", "yellow" if step.allow_fail else "red")

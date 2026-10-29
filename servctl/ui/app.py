@@ -23,6 +23,8 @@ from ..registry import BUILTIN, CATEGORIES, Module, load_plugins, resolve_enable
 from .admin import (CleanupPane, JournaldPane, LogrotatePane, OverviewPane, SiemPane,
                     SyncthingPane)
 from .base import CSS, ConfirmScreen, Pane, PaneHeader
+from .firewall import FirewallPane
+from .mariadb import MariaDbPane
 from .fx import Activity, Brand, Splash, slide_in
 from .net import DiskPane, DnsBenchPane, IperfPane, MailDnsPane, SpeedtestPane, UnboundPane
 from .settings import SettingsPane
@@ -32,6 +34,7 @@ PANES: Dict[str, type] = {
     "journald": JournaldPane, "siem": SiemPane, "syncthing": SyncthingPane,
     "speedtest": SpeedtestPane, "iperf": IperfPane, "dnsbench": DnsBenchPane,
     "unbound": UnboundPane, "maildns": MailDnsPane, "disk": DiskPane, "settings": SettingsPane,
+    "firewall": FirewallPane, "mariadb": MariaDbPane,
 }
 
 DEFAULT_THEME = "tokyo-night"

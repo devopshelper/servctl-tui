@@ -1,2 +1,2 @@
 """servctl - a TUI control plane for routine Linux server administration."""
-__version__ = "0.3.0"
+__version__ = "0.4.0"

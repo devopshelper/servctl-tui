@@ -20,13 +20,29 @@ Settings are always on.
 | Logs | Logrotate | edit retention of any `/etc/logrotate.d` rule in place (paths and `postrotate` scripts kept) or create one; global defaults in `/etc/logrotate.conf`; validated with `logrotate -d` |
 | Logs | Journald | `SystemMaxUse`, `MaxRetentionSec`, … as a drop-in; one-off vacuum by size/age/files |
 | Logs | SIEM forwarding | rsyslog to a SIEM over UDP/TCP/TLS, RFC 5424/3164, disk-buffered queue, extra files (e.g. `audit.log`) via imfile, SELinux port labelling, validated with `rsyslogd -N1` |
+| Services | MariaDB | install `mariadb-server` (RHEL 9 AppStream), secure it, bind local or LAN (+ firewall port); create databases; create users (generated passwords, sent over stdin - never in `ps`); grant/revoke per database with presets (all, app read/write+DDL, read/write, read-only); list databases with users who can access them, users with their databases, all grants; drop user/database (database: typed confirmation + gzipped dump first) |
 | Services | Syncthing | install from EPEL or upstream release (checksum verified), `syncthing@user` service, GUI address/credentials, firewalld ports |
+| Network | Firewall | **firewalld or nftables**. Open/close by port (`443`, `80,443`, `8000-8100`), TCP/UDP/both, optional source IP/network, zone, permanent or auto-close after N minutes (firewalld). Closing finds whatever opens the port - port entry, service (`ssh` = 22), rich rule, nft rule or set - and narrows sets/ranges instead of deleting them. Lists every rule, plus listening sockets with open/blocked/localhost-only status. Refuses to close your SSH port unless you tick the override |
 | Network | Speedtest | built-in Cloudflare test (latency, jitter, multi-stream down/up) or the Ookla CLI; one-click Ookla install |
 | Network | iperf3 | temporary listener with a **self-expiring** firewalld rule and time limit, shows the client command; or run a client test |
 | DNS | DNS benchmark | ranks public, system and local resolvers by cached/uncached latency and reliability; flags DNSSEC validation and **whether Spamhaus answers through each resolver**; apply the winner as system DNS |
 | DNS | Unbound resolver | local **recursive** resolver from IANA root hints (no forwarders) with DNSSEC, monthly root-hints refresh timer, optional LAN service; becomes the system resolver only after it answers |
 | DNS | Mail DNS | MX, PTR + forward-confirmation, Spamhaus/SpamCop listing, SPF (incl. 10-lookup limit), DMARC, DKIM (common + your selectors), MTA-STS policy, TLS-RPT, BIMI, DANE; plus a quick record lookup |
 | Storage | Disk benchmark | CrystalDiskMark-style fio tests (SEQ1M Q8, RND4K Q32/Q1, read/write) with MB/s, IOPS, avg and p99 latency; dd fallback |
+
+### Firewall notes
+
+- **firewalld** (RHEL default): changes are applied to runtime *and* permanent
+  config, so no reload is needed and nothing is lost on reboot. "Auto-close after"
+  uses firewalld's own `--timeout` (runtime only).
+- **nftables** (when firewalld is not running): opening inserts an `accept` rule
+  into the input chain whose policy is `drop`; closing deletes or narrows the
+  accept rule (`{ 22, 80, 443 }` → `{ 22, 443 }`, `8000-8100` → `8000-8049` +
+  `8051-8100`, applied as one atomic nft transaction). With no filtering chain,
+  closing adds a drop rule to a small `inet servctl` table. "Keep after reboot"
+  saves the ruleset to `/etc/sysconfig/nftables.conf` (RHEL) or
+  `/etc/nftables.conf` (validated first, previous file backed up).
+- While firewalld is running its nftables tables are shown read-only.
 
 ### Why Unbound for Spamhaus
 
@@ -124,6 +140,8 @@ if not owned by root or group/world writable. See `examples/plugins/who.py`.
 ## Development
 
 ```bash
-python3 -m unittest -v tests.test_plans tests.test_v2   # uses rsyslogd/logrotate/unbound/fio if installed
+python3 -m unittest -v tests.test_plans tests.test_v2 tests.test_v4
+# real-tool checks run when available: rsyslogd, logrotate, unbound, fio, nft (root), local MariaDB;
+# firewalld flows use tests/fakes/firewall-cmd
 ./release.sh                                            # builds dist/servctl-<version>.zip
 ```
