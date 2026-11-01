@@ -60,10 +60,13 @@ def _switch(self) -> Content:
     v = self.app.get_css_variables()
     on = bool(self.value)
     bg = Color.parse(v["background"])
-    track = Color.parse(v["success"]) if on else Color.parse(v.get("panel-lighten-2", v["panel"]))
-    knob = Color.parse(v.get("foreground", "#e6e6e6"))
-    if not on:
-        knob = knob.blend(track, 0.35)
+    fg = Color.parse(v.get("foreground", "#e6e6e6"))
+    if on:
+        track, knob = Color.parse(v["success"]), fg
+    else:
+        # A dark "off" track disappeared entirely on black backgrounds, so the
+        # track is derived from the theme foreground instead of the panel.
+        track, knob = fg.blend(bg, 0.62), fg
     if self.disabled:
         track, knob = track.blend(bg, 0.55), knob.blend(bg, 0.55)
     # (bg is only used for the disabled look)
@@ -159,6 +162,10 @@ DataTable > .datatable--cursor { background: $accent; color: #000000; text-style
 /* ---------- compact widgets: give them a visible field background ---------- */
 Input.-textual-compact { background: $panel; color: $text; }
 Input.-textual-compact:focus { background: $surface-lighten-2; color: $text; text-style: bold; }
+/* Textual defaults placeholders to $text-disabled (auto 38%), which is
+   unreadable on a black terminal. Pin them to a mid grey instead. */
+Input.-textual-compact > .input--placeholder,
+Input.-textual-compact > .input--suggestion { color: #9e9e9e; }
 Select.-textual-compact > SelectCurrent { background: $panel; color: $text; }
 Select.-textual-compact:focus > SelectCurrent { background: $surface-lighten-2; color: $text; }
 SelectOverlay { border: solid $accent; background: $surface; }
