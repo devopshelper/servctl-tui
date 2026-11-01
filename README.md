@@ -1,115 +1,181 @@
-# servctl
+<div align="center">
 
-A terminal UI control plane for routine Linux server administration, aimed at
-RHEL 9 (Rocky/Alma too) and also usable on Debian/Ubuntu.
-
-Every change is turned into a **plan** of exact commands and file writes. You see
-the plan before anything runs, you can run it as a **dry-run**, and changed files
-are backed up to `/var/backups/servctl/<timestamp>/`. If any step fails, the files
-that plan touched are restored automatically. Diagnostics (benchmarks, lookups)
-are read-only and run straight away.
-
-## Modules
-
-Pick the ones you want in **Settings** (saved to the config file). Overview and
-Settings are always on.
-
-| Group | Module | What it does |
-|---|---|---|
-| System | Cleanup | docker/podman prune (containers, images, networks, volumes, build cache, "older than" filter); dnf/apt cache, orphans, old kernels, old rotated logs, core dumps, tmpfiles |
-| Logs | Logrotate | edit retention of any `/etc/logrotate.d` rule in place (paths and `postrotate` scripts kept) or create one; global defaults in `/etc/logrotate.conf`; validated with `logrotate -d` |
-| Logs | Journald | `SystemMaxUse`, `MaxRetentionSec`, … as a drop-in; one-off vacuum by size/age/files |
-| Logs | SIEM forwarding | rsyslog to a SIEM over UDP/TCP/TLS, RFC 5424/3164, disk-buffered queue, extra files (e.g. `audit.log`) via imfile, SELinux port labelling, validated with `rsyslogd -N1` |
-| Services | MariaDB | install `mariadb-server` (RHEL 9 AppStream), secure it, bind local or LAN (+ firewall port); create databases; create users (generated passwords, sent over stdin - never in `ps`); grant/revoke per database with presets (all, app read/write+DDL, read/write, read-only); list databases with users who can access them, users with their databases, all grants; drop user/database (database: typed confirmation + gzipped dump first) |
-| Services | Syncthing | install from EPEL or upstream release (checksum verified), `syncthing@user` service, GUI address/credentials, firewalld ports |
-| Network | Firewall | **firewalld or nftables**. Open/close by port (`443`, `80,443`, `8000-8100`), TCP/UDP/both, optional source IP/network, zone, permanent or auto-close after N minutes (firewalld). Closing finds whatever opens the port - port entry, service (`ssh` = 22), rich rule, nft rule or set - and narrows sets/ranges instead of deleting them. Lists every rule, plus listening sockets with open/blocked/localhost-only status. Refuses to close your SSH port unless you tick the override |
-| Network | Speedtest | built-in Cloudflare test (latency, jitter, multi-stream down/up) or the Ookla CLI; one-click Ookla install |
-| Network | iperf3 | temporary listener with a **self-expiring** firewalld rule and time limit, shows the client command; or run a client test |
-| DNS | DNS benchmark | ranks public, system and local resolvers by cached/uncached latency and reliability; flags DNSSEC validation and **whether Spamhaus answers through each resolver**; apply the winner as system DNS |
-| DNS | Unbound resolver | local **recursive** resolver from IANA root hints (no forwarders) with DNSSEC, monthly root-hints refresh timer, optional LAN service; becomes the system resolver only after it answers |
-| DNS | Mail DNS | MX, PTR + forward-confirmation, Spamhaus/SpamCop listing, SPF (incl. 10-lookup limit), DMARC, DKIM (common + your selectors), MTA-STS policy, TLS-RPT, BIMI, DANE; plus a quick record lookup |
-| Storage | Disk benchmark | CrystalDiskMark-style fio tests (SEQ1M Q8, RND4K Q32/Q1, read/write) with MB/s, IOPS, avg and p99 latency; dd fallback |
-
-### Firewall notes
-
-- **firewalld** (RHEL default): changes are applied to runtime *and* permanent
-  config, so no reload is needed and nothing is lost on reboot. "Auto-close after"
-  uses firewalld's own `--timeout` (runtime only).
-- **nftables** (when firewalld is not running): opening inserts an `accept` rule
-  into the input chain whose policy is `drop`; closing deletes or narrows the
-  accept rule (`{ 22, 80, 443 }` → `{ 22, 443 }`, `8000-8100` → `8000-8049` +
-  `8051-8100`, applied as one atomic nft transaction). With no filtering chain,
-  closing adds a drop rule to a small `inet servctl` table. "Keep after reboot"
-  saves the ruleset to `/etc/sysconfig/nftables.conf` (RHEL) or
-  `/etc/nftables.conf` (validated first, previous file backed up).
-- While firewalld is running its nftables tables are shown read-only.
-
-### Why Unbound for Spamhaus
-
-Spamhaus refuses DNSBL queries that come through large public resolvers
-(8.8.8.8, 1.1.1.1, …) and answers `127.255.255.254` instead. A local Unbound
-that recurses from the root servers queries Spamhaus directly from your IP. The
-DNS benchmark and Unbound self-test both show whether Spamhaus works.
-
-## Install
-
-```bash
-unzip servctl-*.zip && cd servctl-*/
-sudo ./install.sh          # venv in /opt/servctl, command: servctl
-sudo servctl               # or: servctl --dry-run (safe look-around, no root needed)
+```text
+ ████ █████ ████  █   █  ████ █████ █    
+█     █     █   █ █   █ █       █   █    
+ ███  ████  ████  █   █ █       █   █    
+    █ █     █  █   █ █  █       █   █    
+████  █████ █   █   █    ████   █   █████
 ```
 
-Needs Python ≥ 3.9 (RHEL 9's system python works). `install.sh` pulls `textual`,
-`dnspython` and `PyYAML` into the venv. Tools such as fio, iperf3, unbound or the
-Ookla CLI are installed from inside the app when you need them.
+# servctl
 
-## Keys
+### Transactional, Plan-First Terminal UI for Linux Server Administration
+
+[![Python Version](https://img.shields.io/badge/python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Textual UI](https://img.shields.io/badge/TUI-Textual_8.0+-00ADD8?style=for-the-badge&logo=gnubash&logoColor=white)](https://textual.textualize.io/)
+[![Platform](https://img.shields.io/badge/Platform-RHEL_9_%7C_Rocky_%7C_Alma_%7C_Ubuntu_%7C_Debian-E95420?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/devopshelper/servctl-tui)
+[![Safety Engine](https://img.shields.io/badge/Safety-Dry--Run_%26_Auto--Rollback-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](#-the-safety-engine)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+
+<p align="center">
+  <b>servctl</b> is an ergonomic, menu-driven TUI control plane designed for sysadmins and DevOps engineers.
+  <br />
+  Every modification is turned into an explicit, transparent <b>plan</b> with instant diff previews, pre-execution backups, dry-run simulation, and automatic rollback if anything fails.
+</p>
+
+---
+
+[Features](#-features-at-a-glance) • [Safety Engine](#-the-safety-engine) • [Installation](#-installation) • [Keybindings](#-keyboard-navigation) • [Configuration](#-configuration) • [Plugins](#-extensibility--plugins)
+
+---
+
+</div>
+
+## 🌟 Features at a Glance
+
+* 🛡️ **Transactional Plan Engine**: See exact shell commands and unified file diffs before anything touches your system.
+* ⏪ **Time Machine & Backup Explorer**: Automatic timestamped backups in `/var/backups/servctl/` with 1-click rollback plans.
+* 🧪 **True Dry-Run Mode**: Press <kbd>F2</kbd> anytime to simulate changes without root privileges.
+* 📋 **SSH-Native Clipboard (OSC 52)**: One-click copy for generated MariaDB passwords and iperf3 commands directly to your client clipboard over remote SSH.
+* 🔥 **Dual Firewall Manager**: Seamless support for **firewalld** (runtime + permanent + auto-closing timers) and **nftables** (atomic batch transactions, port-range narrowing, SSH lockout guard).
+* 🗄️ **MariaDB Orchestration**: Install, secure, configure database users with stdin-fed passwords (never in `ps`), privilege presets, and pre-drop gzipped dumps.
+* 🧹 **Smart Cleanup Presets**: 1-click presets (*Safe Clean*, *Deep Clean*, *Containers Only*) for Docker/Podman and host housekeeping.
+* 🔒 **Mail & Recursive DNS Auditing**: Local root-hints **Unbound** resolver (for Spamhaus DNSBL access) + full MX, SPF (10-lookup limit), DMARC, DKIM, MTA-STS, and DANE verification.
+* 🖥️ **Terminal & Font Resilience**: Built strictly with classic CP437/WGL4 glyphs (`┌─┐`, `░▒▓█`) for zero-tofu rendering across PuTTY, Windows consoles, and low-color links.
+
+---
+
+## 🛡️ The Safety Engine
+
+```
+  [ Action Triggered ]
+          │
+          ▼
+  ┌───────────────────┐
+  │  Plan Generation  │  ──► Explicit Steps (argv commands, atomic writes, deletions)
+  └───────────────────┘
+          │
+          ▼
+  ┌───────────────────┐
+  │  Review Dialog    │  ──► Colored Unified Diff (diff -u) + exact $ commands
+  └───────────────────┘
+          │
+    User Confirms
+          │
+          ▼
+  ┌───────────────────┐
+  │ Snapshot Backups  │  ──► Saved to /var/backups/servctl/<timestamp>/
+  └───────────────────┘
+          │
+          ▼
+  ┌───────────────────┐
+  │ Step-by-Step Exec │
+  └───────────────────┘
+     │             │
+  Success        Failure
+     │             │
+     ▼             ▼
+  [ Done ]     ┌────────────────────────────────────────────────────────┐
+               │ Automated Reverse Rollback: restored to previous state │
+               └────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📦 Modules
+
+Modules can be enabled or disabled in **Settings** (persisted to `/etc/servctl/config.yml`). Overview and Settings are always active.
+
+| Category | Module | Highlights |
+|---|---|---|
+| **System** | **Overview** | Real-time CPU, load, memory, statvfs disk bars, degraded systemd unit health monitor. |
+| **System** | **Cleanup** | 1-click presets (*Safe*, *Deep*, *Containers*); Docker/Podman prune (containers, images, build cache with age filters); dnf/apt cache, orphans, old kernels, rotated logs, core dumps. |
+| **Logs** | **Logrotate** | In-place retention editor for `/etc/logrotate.d` and global defaults; validated via `logrotate -d`. |
+| **Logs** | **Journald** | Persistent drop-ins for `SystemMaxUse` and `MaxRetentionSec`; manual vacuum by size, age, or file count. |
+| **Logs** | **SIEM Forwarding** | High-throughput rsyslog shipper (UDP/TCP/TLS, RFC 5424/3164, disk-buffered queues, imfile for `audit.log`, SELinux port labelling, validated with `rsyslogd -N1`). |
+| **Services** | **MariaDB** | RHEL 9 AppStream installer & hardening; local socket unix_socket auth; MariaDB 11.4+ SSL client compatibility; user creation with stdin-fed passwords; privilege presets (`all`, `rw_ddl`, `rw`, `ro`); guarded drop with automatic gzipped dump. |
+| **Services** | **Syncthing** | EPEL or upstream installation (checksum verified), systemd `syncthing@user` service, firewall ports, remote GUI credentials. |
+| **Network** | **Firewall** | **firewalld or nftables**. Open/close by port (`443`, `8000-8100`) or service name (`http`, `https`, `wireguard`, `cockpit`); auto-closing timeout; atomic set/range narrowing; listening socket reachability audit; SSH lockout prevention. |
+| **Network** | **Speedtest** | Zero-dependency built-in Cloudflare multi-stream test (down/up, latency, jitter) or official Ookla CLI. |
+| **Network** | **iperf3** | Temporary listener with **self-expiring** firewalld rule and time limit; 1-click copy for client command. |
+| **DNS** | **DNS Benchmark** | Benchmarks public, system, and local resolvers by latency, reliability, DNSSEC, and Spamhaus answer compatibility. |
+| **DNS** | **Unbound** | Dedicated local recursive resolver from IANA root hints (no forwarders) for direct Spamhaus DNSBL access with monthly refresh timer. |
+| **DNS** | **Mail DNS** | Deep email security audit: MX, PTR + FCrDNS, Spamhaus/SpamCop, SPF (RFC 7208 10-lookup limit evaluation), DMARC, DKIM selectors, MTA-STS, TLS-RPT, BIMI, and DANE TLSA. |
+| **Storage** | **Disk Benchmark** | CrystalDiskMark-style fio benchmarks (SEQ1M Q8, RND4K Q32/Q1 read/write) with MB/s, IOPS, and p99 latency; dd fallback. |
+| **Settings**| **Backup Explorer**| **Time Machine**: Browse historical pre-change snapshots, inspect file diffs, and generate instant rollback plans. |
+
+---
+
+## 🚀 Installation
+
+### Quick Install (Root / Server)
+
+```bash
+# Clone or unpack
+git clone https://github.com/devopshelper/servctl-tui.git /opt/servctl-src
+cd /opt/servctl-src
+
+# Install into isolated venv at /opt/servctl (links /usr/local/bin/servctl)
+sudo ./install.sh
+
+# Run
+sudo servctl
+```
+
+### Safe Exploration Mode (Non-Root)
+
+You can launch `servctl` on any machine without root privileges to test screens and diagnostics:
+
+```bash
+servctl --dry-run
+```
+
+### Requirements
+
+* **Python**: ≥ 3.9 (RHEL 9 system python, Debian 11+, Ubuntu 20.04+ supported out of the box).
+* **Dependencies**: `textual`, `dnspython`, `PyYAML` (installed automatically into the venv by `install.sh`).
+* Optional utilities (`fio`, `iperf3`, `unbound`, `rsyslog`) can be installed on-demand from inside their respective panes.
+
+---
+
+## ⌨️ Keyboard Navigation
+
+Designed for pure keyboard flow without touching the mouse:
 
 | Key | Action |
-|---|---|
-| **Tab / Shift+Tab** | next / previous menu - works from anywhere |
-| ↑ / ↓ | move in the menu, or between fields inside a screen |
-| Enter or → (in the menu) | jump into the screen |
-| Esc | back to the menu |
-| ← / → | between buttons and checkboxes (in text fields: move the cursor) |
-| Enter | text field: next field · button: press · dropdown: open |
-| Space | toggle checkbox · open dropdown |
-| ↑ / ↓ in a table | rows; leaves the table at the first/last row |
-| PageUp / PageDown | scroll the screen |
-| F1 | all keys |
-| Ctrl+P | command palette (jump to any module, change theme) |
-| F2 | toggle dry-run / live |
-| F3 / F4 | show/hide · clear the activity log |
-| F5 | refresh the current screen |
-| Ctrl+Q | quit |
+|:---|:---|
+| <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> | Switch to next / previous module (from anywhere) |
+| <kbd>↑</kbd> / <kbd>↓</kbd> or <kbd>j</kbd> / <kbd>k</kbd> | Move in the sidebar menu or between fields |
+| <kbd>Enter</kbd> or <kbd>→</kbd> | Jump from menu into module screen |
+| <kbd>Esc</kbd> | Return focus to the sidebar menu |
+| <kbd>←</kbd> / <kbd>→</kbd> | Move between buttons and switches (in text inputs: move cursor) |
+| <kbd>Space</kbd> | Toggle switch / open dropdown |
+| <kbd>Ctrl+P</kbd> | **Command Palette**: fuzzy search modules, direct actions, and change theme |
+| <kbd>F1</kbd> | Complete Key Reference dialog |
+| <kbd>F2</kbd> | Toggle **DRY-RUN** / **LIVE** execution mode |
+| <kbd>F3</kbd> / <kbd>F4</kbd> | Toggle activity log panel / clear log |
+| <kbd>F5</kbd> | Refresh current screen data |
+| <kbd>Ctrl+Q</kbd> | Quit `servctl` |
 
-## Appearance
+---
 
-- Themes: pick one in **Settings** (live preview) or Ctrl+P > *Change theme*.
-  Default is `tokyo-night`.
-- Animations: shimmering gradient wordmark, a short splash, a bouncing activity
-  indicator in the top bar while anything runs, slide-in when opening a module,
-  and count-up speed test results. Turn them off in Settings (`ui.animations`)
-  for slow SSH links.
-- Only classic terminal characters are drawn (ASCII, `┌─┐│`, `░▒▓█`), so it
-  renders in PuTTY, Windows consoles and minimal fonts without `□` boxes.
+## 🎨 Appearance & Themes
 
-### Colours look washed out or basic?
+* **Themes**: Live theme previews via **Settings** or <kbd>Ctrl+P</kbd> → *Change theme*. Default: `tokyo-night`.
+* **Animations**: Shimmering gradient wordmark, smooth slide-ins, top-bar activity comet, and count-up benchmarks. Can be toggled off for high-latency SSH connections (`ui.animations: false`).
+* **Terminal Glyph Policy**: Only CP437/WGL4 characters are drawn (`┌─┐`, `░▒▓█`, ASCII). Renders cleanly in PuTTY, minimal serial consoles, and Windows Terminal without missing-character boxes.
+* **Colors**: Automatically upgrades plain `TERM=xterm` (16 colors) to 256 colors (`xterm-256color`) or truecolor.
 
-PuTTY and some SSH clients send `TERM=xterm`, which limits apps to 16 colours.
-servctl upgrades plain `xterm` to 256 colours automatically (`ui.colors: auto`).
-You can force a mode in Settings or the config (`16`, `256`, `truecolor`). In
-PuTTY, setting *Connection > Data > Terminal-type string* to `xterm-256color`
-fixes it for every app.
+---
 
-## Configuration
+## ⚙️ Configuration
 
-`/etc/servctl/config.yml` when run as root, else `~/.config/servctl/config.yml`
-(override with `--config` or `$SERVCTL_CONFIG`). Created by the Settings screen.
+Configuration is stored in `/etc/servctl/config.yml` (root) or `~/.config/servctl/config.yml` (non-root):
 
 ```yaml
 modules:
-  enabled: [overview, cleanup, journald, unbound, maildns, dnsbench, settings]
+  enabled: [overview, cleanup, firewall, mariadb, journald, unbound, maildns, dnsbench, settings]
 ui:
   theme: tokyo-night
   colors: auto          # auto | 16 | 256 | truecolor
@@ -117,36 +183,57 @@ ui:
   splash: true
   dry_run: false
   show_log: false
-speedtest: {url: https://speed.cloudflare.com, download_mb: 100, upload_mb: 25, streams: 4}
-disk: {dir: /var/tmp, size: 1G, runtime: 10}
-iperf: {port: 5201, timeout_min: 15}
+speedtest:
+  url: https://speed.cloudflare.com
+  download_mb: 100
+  upload_mb: 25
+  streams: 4
+disk:
+  dir: /var/tmp
+  size: 1G
+  runtime: 10
+iperf:
+  port: 5201
+  timeout_min: 15
 dns:
-  extra_resolvers: ["Office=10.0.0.53"]
-  dkim_selectors: [mail2024]
+  extra_resolvers: ["Gateway=192.168.1.1"]
+  dkim_selectors: [mail2024, google, default]
 plugins:
   dir: /etc/servctl/plugins
   trusted: [who]
 ```
 
-Command-line overrides:
-
+CLI overrides:
 ```bash
 servctl --list-modules
-servctl --modules unbound,maildns     # show only these, ignoring the config
+servctl --modules firewall,cleanup    # Temporarily restrict UI to specified panes
+servctl --dry-run                     # Force simulation mode
 ```
 
-## Plugins
+---
 
-A plugin is a Python file in `plugins.dir` defining `MODULES = [Module(...)]`
-with a `Pane` subclass. It gets the same plan/confirm/dry-run/rollback engine as
-the built-ins. Plugins load only when listed in `plugins.trusted`, and are refused
-if not owned by root or group/world writable. See `examples/plugins/who.py`.
+## 🧩 Extensibility & Plugins
 
-## Development
+A plugin is an isolated Python file placed in `plugins.dir` defining `MODULES = [Module(...)]` with a custom `Pane` subclass:
+* Integrates directly into the plan/confirm/dry-run/rollback engine.
+* Plugins only load when listed in `plugins.trusted`.
+* Enforces strict file security: refused if not root-owned or if group/world-writable.
+* See [`examples/plugins/who.py`](examples/plugins/who.py) for a working template.
+
+---
+
+## 🛠️ Development & Testing
 
 ```bash
+# Run unit tests
 python3 -m unittest -v tests.test_plans tests.test_v2 tests.test_v4
-# real-tool checks run when available: rsyslogd, logrotate, unbound, fio, nft (root), local MariaDB;
-# firewalld flows use tests/fakes/firewall-cmd
-./release.sh                                            # builds dist/servctl-<version>.zip
+
+# Build release distribution zip
+./release.sh
 ```
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ for Linux System Administrators and DevOps Engineers.</sub>
+</div>
