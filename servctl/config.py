@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
+from .core import is_root
 
 SYSTEM_PATH = Path("/etc/servctl/config.yml")
 USER_PATH = Path(os.path.expanduser("~/.config/servctl/config.yml"))
@@ -70,7 +71,7 @@ def default_path() -> Path:
     env = os.environ.get("SERVCTL_CONFIG")
     if env:
         return Path(env)
-    return SYSTEM_PATH if os.geteuid() == 0 else USER_PATH
+    return SYSTEM_PATH if is_root() else USER_PATH
 
 
 class Config:

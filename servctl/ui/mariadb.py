@@ -13,7 +13,7 @@ from textual.widgets import Button, Checkbox, DataTable, Input, Select, Static
 from .. import mariadb as m
 from ..core import os_info
 from ..sysinfo import human
-from .base import NavTable, Pane, row, section
+from .base import NavTable, Pane, copy_to_clipboard, row, section
 
 
 def _names(text: str) -> List[str]:

@@ -286,7 +286,7 @@ def which(name: str) -> Optional[str]:
 
 
 def is_root() -> bool:
-    return os.geteuid() == 0
+    return getattr(os, "geteuid", lambda: 0)() == 0
 
 
 def user_exists(name: str) -> bool:

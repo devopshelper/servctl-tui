@@ -12,7 +12,7 @@ from textual.widgets import Button, Checkbox, DataTable, Input, RichLog, Rule, S
 
 from .. import bench, dnsutil, maildns, unbound
 from ..core import Step, capture, os_info, which
-from .base import NavTable, Pane, cmd_block, row, section
+from .base import NavTable, Pane, cmd_block, copy_to_clipboard, row, section
 from .fx import count_up
 
 

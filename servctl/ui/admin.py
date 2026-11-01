@@ -8,7 +8,7 @@ from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal
-from textual.widgets import Button, Checkbox, Input, Rule, Select, Static
+from textual.widgets import Button, Checkbox, Input, Label, Rule, Select, Static
 
 from .. import cleanup, logs, siem, syncthing, sysinfo
 from ..core import (capture, default_user, is_root, os_info, read_text, selinux_enforcing,
