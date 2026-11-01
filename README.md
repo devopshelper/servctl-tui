@@ -12,8 +12,8 @@
 
 ### Transactional, Plan-First Terminal UI for Linux Server Administration
 
-[![Python Version](https://img.shields.io/badge/python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Textual UI](https://img.shields.io/badge/TUI-Textual_8.0+-00ADD8?style=for-the-badge&logo=gnubash&logoColor=white)](https://textual.textualize.io/)
+[![Python Version](https://img.shields.io/badge/python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Textual UI](https://img.shields.io/badge/TUI-Textual_1.0+-00ADD8?style=for-the-badge&logo=gnubash&logoColor=white)](https://textual.textualize.io/)
 [![Platform](https://img.shields.io/badge/Platform-RHEL_9_%7C_Rocky_%7C_Alma_%7C_Ubuntu_%7C_Debian-E95420?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/devopshelper/servctl-tui)
 [![Safety Engine](https://img.shields.io/badge/Safety-Dry--Run_%26_Auto--Rollback-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](#-the-safety-engine)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
@@ -133,7 +133,7 @@ servctl --dry-run
 
 ### Requirements
 
-* **Python**: ≥ 3.9 (RHEL 9 system python, Debian 11+, Ubuntu 20.04+ supported out of the box).
+* **Python**: ≥ 3.8 (RHEL 9, Debian 11+, Ubuntu 20.04+ supported out of the box).
 * **Dependencies**: `textual`, `dnspython`, `PyYAML` (installed automatically into the venv by `install.sh`).
 * Optional utilities (`fio`, `iperf3`, `unbound`, `rsyslog`) can be installed on-demand from inside their respective panes.
 

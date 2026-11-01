@@ -20,7 +20,10 @@ from textual.screen import ModalScreen
 from textual.color import Color
 from textual.content import Content
 from textual.scrollbar import ScrollBarRender
-from textual.style import Style as VisualStyle
+try:
+    from textual.style import Style as VisualStyle
+except ImportError:
+    from textual.visual import Style as VisualStyle  # type: ignore
 from textual.widgets import Button, Checkbox, DataTable, Input, Label, RichLog, Select, Static
 
 from ..core import Step, capture, is_root
