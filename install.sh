@@ -43,10 +43,10 @@ echo "==> Installing servctl and dependencies..."
 # Check if running locally inside cloned repository
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
-    /opt/servctl/bin/pip install --quiet "$SCRIPT_DIR"
+    /opt/servctl/bin/pip install --upgrade --force-reinstall --no-cache-dir "$SCRIPT_DIR"
 else
     # Piped via curl / standalone execution: install from GitHub
-    /opt/servctl/bin/pip install --quiet "git+https://github.com/devopshelper/servctl-tui.git"
+    /opt/servctl/bin/pip install --upgrade --force-reinstall --no-cache-dir "git+https://github.com/devopshelper/servctl-tui.git"
 fi
 
 ln -sf /opt/servctl/bin/servctl /usr/local/bin/servctl
