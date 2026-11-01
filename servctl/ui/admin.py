@@ -106,6 +106,12 @@ class OverviewPane(Pane):
 class CleanupPane(Pane):
     def compose(self) -> ComposeResult:
         engine = cleanup.container_engine()
+        with Horizontal(classes="buttons"):
+            yield Label("Quick presets: ", classes="dim")
+            yield Button("Safe Clean", id="cl-pre-safe", compact=True)
+            yield Button("Deep Clean", id="cl-pre-deep", compact=True)
+            yield Button("Containers Only", id="cl-pre-cont", compact=True)
+            yield Button("Uncheck All", id="cl-pre-none", compact=True)
         yield from section(f"Containers ({engine or 'docker/podman not found'})",
                            "Prunes only what is not used by any container. Volumes hold data: "
                            "off by default.")
@@ -170,6 +176,70 @@ class CleanupPane(Pane):
             rotated_logs=self.chk("cl-logs"), log_days=self.num("cl-logdays", "Log age"),
             coredumps=self.chk("cl-cores"), core_days=self.num("cl-coredays", "Core dump age"),
             tmpfiles=self.chk("cl-tmp"))))
+
+    @on(Button.Pressed, "#cl-pre-safe")
+    def _pre_safe(self) -> None:
+        self.query_one("#cl-containers", Checkbox).value = True
+        self.query_one("#cl-images", Checkbox).value = True
+        self.query_one("#cl-allimages", Checkbox).value = False
+        self.query_one("#cl-networks", Checkbox).value = True
+        self.query_one("#cl-volumes", Checkbox).value = False
+        self.query_one("#cl-allvolumes", Checkbox).value = False
+        self.query_one("#cl-build", Checkbox).value = True
+        self.query_one("#cl-until", Input).value = "168h"
+
+        self.query_one("#cl-pkg", Checkbox).value = True
+        self.query_one("#cl-autoremove", Checkbox).value = False
+        self.query_one("#cl-kernels", Checkbox).value = False
+        self.query_one("#cl-logs", Checkbox).value = True
+        self.query_one("#cl-cores", Checkbox).value = True
+        self.query_one("#cl-tmp", Checkbox).value = True
+        self.app.notify("Applied 'Safe Clean' preset")
+
+    @on(Button.Pressed, "#cl-pre-deep")
+    def _pre_deep(self) -> None:
+        self.query_one("#cl-containers", Checkbox).value = True
+        self.query_one("#cl-images", Checkbox).value = True
+        self.query_one("#cl-allimages", Checkbox).value = True
+        self.query_one("#cl-networks", Checkbox).value = True
+        self.query_one("#cl-volumes", Checkbox).value = True
+        self.query_one("#cl-allvolumes", Checkbox).value = False
+        self.query_one("#cl-build", Checkbox).value = True
+        self.query_one("#cl-until", Input).value = ""
+
+        self.query_one("#cl-pkg", Checkbox).value = True
+        self.query_one("#cl-autoremove", Checkbox).value = True
+        self.query_one("#cl-kernels", Checkbox).value = True
+        self.query_one("#cl-logs", Checkbox).value = True
+        self.query_one("#cl-cores", Checkbox).value = True
+        self.query_one("#cl-tmp", Checkbox).value = True
+        self.app.notify("Applied 'Deep Clean' preset", severity="warning")
+
+    @on(Button.Pressed, "#cl-pre-cont")
+    def _pre_cont(self) -> None:
+        self.query_one("#cl-containers", Checkbox).value = True
+        self.query_one("#cl-images", Checkbox).value = True
+        self.query_one("#cl-allimages", Checkbox).value = False
+        self.query_one("#cl-networks", Checkbox).value = True
+        self.query_one("#cl-volumes", Checkbox).value = False
+        self.query_one("#cl-allvolumes", Checkbox).value = False
+        self.query_one("#cl-build", Checkbox).value = True
+
+        self.query_one("#cl-pkg", Checkbox).value = False
+        self.query_one("#cl-autoremove", Checkbox).value = False
+        self.query_one("#cl-kernels", Checkbox).value = False
+        self.query_one("#cl-logs", Checkbox).value = False
+        self.query_one("#cl-cores", Checkbox).value = False
+        self.query_one("#cl-tmp", Checkbox).value = False
+        self.app.notify("Applied 'Containers Only' preset")
+
+    @on(Button.Pressed, "#cl-pre-none")
+    def _pre_none(self) -> None:
+        for cid in ("cl-containers", "cl-images", "cl-allimages", "cl-networks",
+                    "cl-volumes", "cl-allvolumes", "cl-build", "cl-pkg",
+                    "cl-autoremove", "cl-kernels", "cl-logs", "cl-cores", "cl-tmp"):
+            self.query_one(f"#{cid}", Checkbox).value = False
+        self.app.notify("Unchecked all items")
 
 
 NEW = "__new__"

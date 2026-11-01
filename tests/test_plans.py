@@ -86,6 +86,31 @@ class CoreTests(unittest.TestCase):
     def test_secret_hidden(self):
         s = core.Step.cmd("t", "tool", "--password=hunter2", display="tool --password=***")
         self.assertNotIn("hunter2", s.describe())
+    def test_describe_unified_diff(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "sample.conf"
+            p.write_text("line1\nold_line\nline3\n")
+            s = core.Step.write("Update sample", str(p), "line1\nnew_line\nline3\n")
+            desc = s.describe()
+            self.assertIn("update " + str(p), desc)
+            self.assertIn("-old_line", desc)
+            self.assertIn("+new_line", desc)
+
+    def test_list_and_restore_backups(self):
+        with tempfile.TemporaryDirectory() as d:
+            bk_root = Path(d) / "backups"
+            stamp_dir = bk_root / "20261101-120000" / "etc"
+            stamp_dir.mkdir(parents=True)
+            f = stamp_dir / "my.conf"
+            f.write_text("backed_up_data")
+            with mock.patch.object(core, "BACKUP_ROOT", bk_root):
+                bks = core.list_backups()
+                self.assertEqual(len(bks), 1)
+                self.assertEqual(bks[0].stamp, "20261101-120000")
+                plan = core.restore_backup_plan(bks[0])
+                self.assertEqual(len(plan), 1)
+                self.assertEqual(plan[0].content, "backed_up_data")
+
 
 
 class CleanupTests(unittest.TestCase):

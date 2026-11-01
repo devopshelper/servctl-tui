@@ -192,6 +192,7 @@ class IperfPane(Pane):
         with Horizontal(classes="buttons"):
             yield Button("Start listener", id="ip-start", variant="primary")
             yield Button("Stop listener", id="ip-stop", disabled=True)
+            yield Button("Copy client cmd", id="ip-copy", compact=True, disabled=True)
             yield Button("Install iperf3", id="ip-install")
         yield Rule()
         yield from section("Run a test against another server")
@@ -225,6 +226,7 @@ class IperfPane(Pane):
         self.query_one("#ip-status", Static).update(Text(text))
         self.query_one("#ip-start", Button).disabled = bool(l and l.running)
         self.query_one("#ip-stop", Button).disabled = not (l and l.running)
+        self.query_one("#ip-copy", Button).disabled = not (l and l.running)
 
     def _out(self, msg: str, style: str = "") -> None:
         self.query_one("#ip-out", RichLog).write(Text(msg, style=style))
@@ -266,6 +268,16 @@ class IperfPane(Pane):
     def _stop(self) -> None:
         if self.listener:
             self.listener.stop()
+
+    @on(Button.Pressed, "#ip-copy")
+    def _copy_iperf(self) -> None:
+        if self.listener and self.listener.running:
+            ips = bench.local_ips()
+            ip = ips[0] if ips else "127.0.0.1"
+            cmd = f"iperf3 -c {ip} -p {self.listener.port}"
+            copy_to_clipboard(self.app, cmd, "iperf3 client command")
+        else:
+            self.app.notify("Listener is not running", severity="warning")
 
     def on_unmount(self) -> None:
         if self.listener:

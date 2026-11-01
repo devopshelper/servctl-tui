@@ -68,8 +68,9 @@ tcp   LISTEN 0 511 *:8443 *:* users:(("nginx",pid=4,fd=6))"""
 
 class PortParsing(unittest.TestCase):
     def test_parse(self):
-        self.assertEqual(fw.parse_ports("22, 80 8000-8100"), [(22, 22), (80, 80), (8000, 8100)])
-        for bad in ("", "0", "70000", "90-80", "http"):
+        self.assertEqual(fw.parse_ports("http, https"), [(80, 80), (443, 443)])
+        self.assertEqual(fw.parse_ports("ssh, cockpit"), [(22, 22), (9090, 9090)])
+        for bad in ("", "0", "70000", "90-80", "unknown_bogus_svc"):
             with self.assertRaises(ValueError):
                 fw.parse_ports(bad)
 

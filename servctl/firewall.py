@@ -29,21 +29,42 @@ NFT_CONF_CANDIDATES = ("/etc/sysconfig/nftables.conf", "/etc/nftables.conf")
 # Port parsing helpers
 # --------------------------------------------------------------------------- #
 
+COMMON_SERVICES: Dict[str, int] = {
+    "ssh": 22, "ftp": 21, "telnet": 23, "smtp": 25, "dns": 53, "domain": 53,
+    "http": 80, "pop3": 110, "ntp": 123, "imap": 143, "snmp": 161, "ldap": 389,
+    "https": 443, "smtps": 465, "imaps": 993, "pop3s": 995, "mysql": 3306, "mariadb": 3306,
+    "rdp": 3389, "postgres": 5432, "postgresql": 5432, "redis": 6379, "http-alt": 8080,
+    "cockpit": 9090, "wireguard": 51820, "syncthing": 8384, "iperf": 5201, "iperf3": 5201,
+}
+
+
 def parse_ports(text: str) -> List[Range]:
-    """'22', '80,443', '8000-8100 9000' -> [(22,22), (80,80), (443,443), (8000,8100), (9000,9000)]."""
+    """'22', '80,443', 'http, https', '8000-8100 9000' -> [(22,22), (80,80), ...]."""
     out: List[Range] = []
     for tok in re.split(r"[,\s]+", text.strip()):
+        tok = tok.strip()
         if not tok:
             continue
+        tok_lower = tok.lower()
+        if tok_lower in COMMON_SERVICES:
+            p = COMMON_SERVICES[tok_lower]
+            out.append((p, p))
+            continue
+        try:
+            p = socket.getservbyname(tok_lower)
+            out.append((p, p))
+            continue
+        except (OSError, socket.error):
+            pass
         m = re.fullmatch(r"(\d+)(?:[-:](\d+))?", tok)
         if not m:
-            raise ValueError(f"'{tok}' is not a port or range (examples: 443, 80,443, 8000-8100)")
+            raise ValueError(f"'{tok}' is not a port, range, or recognized service name (examples: 443, http, 8000-8100)")
         a, b = int(m.group(1)), int(m.group(2) or m.group(1))
         if not (1 <= a <= 65535 and 1 <= b <= 65535) or b < a:
             raise ValueError(f"'{tok}' is out of range (1-65535, low-high)")
         out.append((a, b))
     if not out:
-        raise ValueError("Enter a port, e.g. 443 or 8000-8100")
+        raise ValueError("Enter a port or service name, e.g. 443, http or 8000-8100")
     return out
 
 

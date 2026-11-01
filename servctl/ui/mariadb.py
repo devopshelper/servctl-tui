@@ -60,6 +60,7 @@ class MariaDbPane(Pane):
         yield Checkbox("Reset the password if the user already exists", False, id="my-reset")
         with Horizontal(classes="buttons"):
             yield Button("Generate password", id="my-gen")
+            yield Button("Copy password", id="my-copypw", compact=True)
             yield Button("Create user", id="my-usercreate", variant="success")
             yield Button("Drop selected user", id="my-userdrop", variant="error")
         t = NavTable(id="my-users", classes="results", cursor_type="row")
@@ -180,8 +181,16 @@ class MariaDbPane(Pane):
     def _generate(self) -> None:
         pw = m.generate_password()
         self.query_one("#my-pass", Input).value = pw
-        self.query_one("#my-genout", Static).update(Text(f"Generated password: {pw}   (copy it now - it is not "
-                                                         "stored anywhere)", style="bold yellow"))
+        self.query_one("#my-genout", Static).update(Text(f"Generated password: {pw}   (copied to clipboard!)", style="bold green"))
+        copy_to_clipboard(self.app, pw, "MariaDB password")
+
+    @on(Button.Pressed, "#my-copypw")
+    def _copypw(self) -> None:
+        pw = self.query_one("#my-pass", Input).value
+        if pw:
+            copy_to_clipboard(self.app, pw, "MariaDB password")
+        else:
+            self.app.notify("No password to copy", severity="warning")
 
     @on(Button.Pressed, "#my-usercreate")
     def _create_user(self) -> None:

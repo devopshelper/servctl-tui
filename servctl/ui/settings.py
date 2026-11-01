@@ -10,7 +10,8 @@ from textual.containers import Horizontal
 from textual.widgets import Button, Checkbox, Select, Static
 
 from ..registry import CATEGORIES
-from .base import Pane, row, section
+from .. import core
+from .base import BackupModalScreen, Pane, row, section
 
 
 def _cid(module_id: str) -> str:
@@ -52,6 +53,12 @@ class SettingsPane(Pane):
             yield Button("Save", id="set-save", variant="primary")
             yield Button("Select all", id="set-all")
             yield Button("Defaults", id="set-defaults")
+        yield from section("Backup snapshots & rollbacks",
+                           f"Automatic pre-modification backups stored in {core.BACKUP_ROOT}. "
+                           "Inspect file diffs and restore previous states safely.")
+        with Horizontal(classes="buttons"):
+            yield Button("Browse snapshots & rollback", id="set-backups", variant="primary")
+
         yield from section("Plugins",
                            f"Python files in {app.cfg.get('plugins.dir')} that are listed under "
                            "plugins.trusted in the config file. They must be root-owned and not "
@@ -70,6 +77,10 @@ class SettingsPane(Pane):
     @on(Button.Pressed, "#set-defaults")
     def _defaults(self) -> None:
         self._set_all(lambda m: m.default)
+
+    @on(Button.Pressed, "#set-backups")
+    def _open_backups(self) -> None:
+        self.app.push_screen(BackupModalScreen())
 
     @on(Button.Pressed, "#set-save")
     def _save(self) -> None:

@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import datetime
 import os
-import pwd
+try:
+    import pwd
+except ImportError:
+    pwd = None  # type: ignore
 import shlex
 import shutil
 import socket
@@ -59,13 +62,35 @@ class Step:
     def delete(cls, title: str, path: str) -> "Step":
         return cls(title=title, path=path, remove=True)
 
-    def describe(self) -> str:
+    def describe(self, diff: bool = True) -> str:
         if self.argv is not None:
             body = self.display if self.display is not None else shlex.join(self.argv)
             return "\n".join("$ " + line if i == 0 else "  " + line
                              for i, line in enumerate(body.splitlines() or [""]))
+        p = Path(self.path or "")
         if self.remove:
+            if diff and p.exists():
+                try:
+                    old_lines = p.read_text(errors="replace").splitlines()
+                    preview = "\n".join("  - " + l for l in old_lines[:15])
+                    more = f"\n  ... ({len(old_lines) - 15} more lines)" if len(old_lines) > 15 else ""
+                    return f"remove {self.path} ({len(old_lines)} lines, backed up first):\n{preview}{more}"
+                except Exception:
+                    pass
             return f"remove {self.path} (backed up first)"
+
+        if diff and p.exists():
+            try:
+                import difflib
+                old_lines = p.read_text(errors="replace").splitlines()
+                new_lines = (self.content or "").rstrip("\n").splitlines()
+                udiff = list(difflib.unified_diff(old_lines, new_lines, fromfile=f"a/{p.name}", tofile=f"b/{p.name}", lineterm=""))
+                if udiff:
+                    return f"update {self.path} (mode {self.mode:o}, backed up first):\n" + "\n".join("  " + l for l in udiff)
+                return f"write {self.path} (mode {self.mode:o}, identical content)"
+            except Exception:
+                pass
+
         lines = (self.content or "").rstrip("\n").splitlines()
         return f"write {self.path} (mode {self.mode:o}):\n" + "\n".join("  │ " + l for l in lines)
 
@@ -77,7 +102,8 @@ class Step:
 def _backup(path: Path, stamp: str) -> Optional[Path]:
     if not path.exists():
         return None
-    dest = BACKUP_ROOT / stamp / path.relative_to("/")
+    p_res = path.resolve()
+    dest = BACKUP_ROOT / stamp / p_res.relative_to(p_res.anchor)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, dest)
     return dest
@@ -187,6 +213,49 @@ def _rollback(undo: List[Tuple[Path, Optional[Path]]], emit: Emitter) -> None:
                 emit(f"  rollback: restored {path}", "yellow")
         except OSError as exc:
             emit(f"  rollback of {path} failed: {exc}", "red")
+
+
+@dataclass
+class BackupEntry:
+    stamp: str
+    time_str: str
+    files: List[Tuple[str, Path]]  # (target_original_path, backup_file_path)
+
+
+def list_backups() -> List[BackupEntry]:
+    """List existing backup snapshots under BACKUP_ROOT, newest first."""
+    if not BACKUP_ROOT.exists():
+        return []
+    entries: List[BackupEntry] = []
+    for d in sorted(BACKUP_ROOT.iterdir(), reverse=True):
+        if not d.is_dir():
+            continue
+        stamp = d.name
+        time_str = stamp
+        if len(stamp) == 15 and stamp[8] == "-":
+            time_str = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]} {stamp[9:11]}:{stamp[11:13]}:{stamp[13:15]}"
+        backed_files: List[Tuple[str, Path]] = []
+        for f in d.rglob("*"):
+            if f.is_file():
+                rel = f.relative_to(d)
+                orig = "/" + str(rel).replace("\\", "/")
+                backed_files.append((orig, f))
+        if backed_files:
+            entries.append(BackupEntry(stamp=stamp, time_str=time_str, files=backed_files))
+    return entries
+
+
+def restore_backup_plan(entry: BackupEntry) -> List[Step]:
+    """Build a plan to restore all files from a backup snapshot."""
+    steps: List[Step] = []
+    for orig, bpath in entry.files:
+        try:
+            content = bpath.read_text(errors="replace")
+            mode = bpath.stat().st_mode & 0o777
+            steps.append(Step.write(f"Restore {orig} from {entry.stamp}", orig, content, mode=mode))
+        except OSError:
+            pass
+    return steps
 
 
 # --------------------------------------------------------------------------- #

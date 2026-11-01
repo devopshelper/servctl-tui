@@ -28,7 +28,7 @@ class FirewallPane(Pane):
                                       ("firewalld", "firewalld"), ("nftables", "nftables")],
                                      value="auto", allow_blank=False, id="fw-backend"))
         yield from section("Open or close ports")
-        yield row("Port(s)", Input(placeholder="443   or  80,443   or  8000-8100", id="fw-ports"))
+        yield row("Port(s) / Service", Input(placeholder="443, http, https, 8000-8100, cockpit...", id="fw-ports"))
         yield row("Protocol", Select([("TCP", "tcp"), ("UDP", "udp"), ("TCP + UDP", "both")],
                                      value="tcp", allow_blank=False, id="fw-proto"))
         yield row("Zone (firewalld)", Select([("public", "public")], value="public", allow_blank=False,

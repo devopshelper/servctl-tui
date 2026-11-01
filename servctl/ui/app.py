@@ -23,7 +23,7 @@ from ..core import Step, is_root, os_info, run_plan
 from ..registry import BUILTIN, CATEGORIES, Module, load_plugins, resolve_enabled
 from .admin import (CleanupPane, JournaldPane, LogrotatePane, OverviewPane, SiemPane,
                     SyncthingPane)
-from .base import CSS, ConfirmScreen, HelpScreen, Pane, PaneHeader
+from .base import CSS, BackupModalScreen, ConfirmScreen, HelpScreen, Pane, PaneHeader
 from .firewall import FirewallPane
 from .mariadb import MariaDbPane
 from .fx import Activity, Brand, Splash, slide_in
@@ -54,6 +54,8 @@ class ServctlApp(App):
         Binding("f3", "toggle_log", "Log"),
         Binding("f4", "clear_log", "Clear log", show=False),
         Binding("f5", "refresh", "Refresh"),
+        Binding("j", "vim_down", "Down", show=False),
+        Binding("k", "vim_up", "Up", show=False),
         Binding("ctrl+q", "quit", "Quit"),
     ]
 
@@ -241,6 +243,17 @@ class ServctlApp(App):
             yield SystemCommand(f"Open: {m.title}", m.description, partial(self.goto, m.id))
         yield SystemCommand("Toggle dry-run", "Switch between dry-run and live mode",
                             self.action_toggle_dry_run)
+        yield SystemCommand("Backups: Browse snapshots & rollbacks",
+                            "Inspect past configuration backups and revert changes safely",
+                            self.action_show_backups)
+        yield SystemCommand("Action: Open firewall port", "Jump to firewall module",
+                            partial(self.goto, "firewall"))
+        yield SystemCommand("Action: Internet speedtest", "Jump to speedtest module",
+                            partial(self.goto, "speedtest"))
+        yield SystemCommand("Action: DNS benchmark", "Compare system, public and local resolvers",
+                            partial(self.goto, "dnsbench"))
+        yield SystemCommand("Action: Host & container cleanup", "Jump to cleanup module",
+                            partial(self.goto, "cleanup"))
 
     # ------------------------------------------------------------------ running things
 
@@ -318,6 +331,25 @@ class ServctlApp(App):
             self.call_from_thread(on_done, result)
 
     # ------------------------------------------------------------------ actions
+
+    def action_show_backups(self) -> None:
+        self.push_screen(BackupModalScreen())
+
+    def action_vim_down(self) -> None:
+        from textual.widgets import Input
+        if not isinstance(self.focused, Input):
+            if hasattr(self.focused, "action_cursor_down"):
+                self.focused.action_cursor_down()
+            else:
+                self.screen.focus_next()
+
+    def action_vim_up(self) -> None:
+        from textual.widgets import Input
+        if not isinstance(self.focused, Input):
+            if hasattr(self.focused, "action_cursor_up"):
+                self.focused.action_cursor_up()
+            else:
+                self.screen.focus_previous()
 
     def action_focus_sidebar(self) -> None:
         self.query_one("#sidebar").focus()

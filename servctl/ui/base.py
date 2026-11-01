@@ -197,6 +197,25 @@ class PaneHeader(Vertical):
         yield Static(self._desc, classes="ph-desc")
 
 
+def copy_to_clipboard(app: Any, text: str, label: str = "Copied to clipboard") -> bool:
+    """Copy text to client clipboard using OSC 52 and Textual's copy_to_clipboard."""
+    if not text:
+        return False
+    try:
+        app.copy_to_clipboard(text)
+    except Exception:
+        pass
+    try:
+        import base64, sys
+        payload = base64.b64encode(text.encode("utf-8")).decode("ascii")
+        sys.stdout.write(f"\033]52;c;{payload}\a")
+        sys.stdout.flush()
+    except Exception:
+        pass
+    short = text[:28] + "..." if len(text) > 30 else text
+    app.notify(f"{label}: {short}", severity="information")
+    return True
+
 def make_compact(root) -> None:
     for w in root.query("Input, Select, Button, Checkbox"):
         w.compact = True
@@ -204,7 +223,7 @@ def make_compact(root) -> None:
 
 HELP = [
     ("Tab / Shift+Tab", "next / previous menu (works everywhere)"),
-    ("Up / Down", "move through the menu, or between fields inside a screen"),
+    ("Up / Down  ·  j / k", "move through the menu, or between fields inside a screen"),
     ("Enter or Right", "from the menu: jump into the screen"),
     ("Esc", "back to the menu"),
     ("Left / Right", "between buttons and checkboxes (in text fields: move the cursor)"),
@@ -241,6 +260,75 @@ class HelpScreen(ModalScreen[None]):
     def action_close(self) -> None:
         self.dismiss(None)
 
+
+
+class BackupModalScreen(ModalScreen[None]):
+    BINDINGS = [Binding("escape,q", "close", "Close")]
+    DEFAULT_CSS = """
+    BackupModalScreen { align: center middle; background: $background 60%; }
+    #bk-dialog { width: 90; height: auto; max-height: 85%; border: double $accent; background: $surface;
+                 padding: 1 2; border-title-color: $accent; border-title-style: bold; }
+    #bk-table { height: 10; margin-bottom: 1; }
+    #bk-details { height: 8; margin-bottom: 1; border: solid $primary; padding: 0 1; background: $background; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="bk-dialog"):
+            yield Label("Select a snapshot to inspect backed-up files and generate a rollback plan:", classes="hint")
+            yield DataTable(id="bk-table")
+            with VerticalScroll(id="bk-details"):
+                yield Static("Select a backup to view files", id="bk-text")
+            with Horizontal(classes="buttons"):
+                yield Button("Restore snapshot", id="bk-restore", variant="primary", disabled=True)
+                yield Button("Close  [Esc]", id="bk-close")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#bk-table", DataTable)
+        table.cursor_type = "row"
+        table.add_columns("Timestamp", "Date / Time", "Files backed up")
+        from .. import core
+        self.backups = core.list_backups()
+        for idx, b in enumerate(self.backups):
+            table.add_row(b.stamp, b.time_str, f"{len(b.files)} file(s)", key=str(idx))
+        if self.backups:
+            table.focus()
+            self._update_details(0)
+        else:
+            self.query_one("#bk-text", Static).update("No backup snapshots found under /var/backups/servctl.")
+
+    @on(DataTable.RowHighlighted)
+    def _row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        try:
+            idx = int(event.row_key.value)
+            self._update_details(idx)
+        except (ValueError, TypeError, IndexError):
+            pass
+
+    def _update_details(self, idx: int) -> None:
+        if 0 <= idx < len(self.backups):
+            b = self.backups[idx]
+            lines = [f"Snapshot: {b.stamp} ({b.time_str})", "Files:"]
+            for orig, bfile in b.files:
+                lines.append(f"  • {orig} ({bfile.stat().st_size} bytes)")
+            self.query_one("#bk-text", Static).update("\n".join(lines))
+            self.query_one("#bk-restore", Button).disabled = False
+            self.selected_idx = idx
+
+    @on(Button.Pressed, "#bk-close")
+    def _close(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#bk-restore")
+    def _restore(self) -> None:
+        if hasattr(self, "selected_idx") and 0 <= self.selected_idx < len(self.backups):
+            from .. import core
+            entry = self.backups[self.selected_idx]
+            self.dismiss(None)
+            steps = core.restore_backup_plan(entry)
+            self.app.execute(f"Rollback to snapshot {entry.stamp}", steps, None)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
 
 class ConfirmScreen(ModalScreen[bool]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]

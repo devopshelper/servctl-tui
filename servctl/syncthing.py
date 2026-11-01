@@ -1,7 +1,10 @@
 """Install and enable Syncthing as a per-user system service (RHEL 9 focused)."""
 from __future__ import annotations
 
-import pwd
+try:
+    import pwd
+except ImportError:
+    pwd = None  # type: ignore
 import re
 from dataclasses import dataclass
 from typing import List
