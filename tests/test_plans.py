@@ -280,6 +280,15 @@ class SiemTests(unittest.TestCase):
 
 
 class SyncthingTests(unittest.TestCase):
+    def test_debian_ubuntu_plan(self):
+        osi = core.OSInfo(id="ubuntu", id_like=["debian"], version_id="22.04")
+        with mock.patch.object(syncthing, "firewalld_running", return_value=False):
+            steps = syncthing.install_plan(syncthing.SyncthingOpts(
+                user="nobody", method="package", gui_user="admin", gui_password="s3cret", gui_remote=False), osi)
+        text = "\n".join(s.describe() for s in steps)
+        self.assertIn("apt-get install -y syncthing", text)
+        self.assertIn("STGUIADDRESS=127.0.0.1:8384", text)
+
     def test_rhel_epel_plan(self):
         osi = core.OSInfo(id="rhel", id_like=["fedora"], version_id="9.4")
         with mock.patch.object(syncthing, "firewalld_running", return_value=True):

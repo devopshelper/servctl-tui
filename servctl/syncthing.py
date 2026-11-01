@@ -77,10 +77,12 @@ class SyncthingOpts:
 def install_plan(o: SyncthingOpts, osi: OSInfo) -> List[Step]:
     if not re.match(r"^[a-z_][a-z0-9_.-]*\$?$", o.user or ""):
         raise ValueError("Enter the Linux user Syncthing should run as")
-    try:
-        home = pwd.getpwnam(o.user).pw_dir
-    except KeyError:
-        raise ValueError(f"User '{o.user}' does not exist (create it with: useradd -m {o.user})")
+    home = f"/home/{o.user}"
+    if pwd is not None:
+        try:
+            home = pwd.getpwnam(o.user).pw_dir
+        except KeyError:
+            raise ValueError(f"User '{o.user}' does not exist (create it with: useradd -m {o.user})")
     if o.user == "root":
         raise ValueError("Running Syncthing as root is not recommended; pick a normal user")
     if not 1 <= o.gui_port <= 65535:
@@ -93,17 +95,19 @@ def install_plan(o: SyncthingOpts, osi: OSInfo) -> List[Step]:
     unit = f"syncthing@{o.user}.service"
     steps: List[Step] = []
 
-    if o.method == "epel":
-        if not osi.rhel_like:
-            raise ValueError("The EPEL method is for RHEL/Rocky/Alma; use 'upstream binary' here")
-        major = osi.major or "9"
-        if osi.id == "rhel":
-            steps.append(Step.cmd("Enable EPEL repository", "dnf", "install", "-y",
-                                  f"https://dl.fedoraproject.org/pub/epel/epel-release-latest-{major}.noarch.rpm"))
-        elif osi.id != "fedora":
-            steps.append(Step.cmd("Enable EPEL repository", "dnf", "install", "-y", "epel-release"))
-        steps.append(Step.cmd("Install syncthing package", "dnf", "install", "-y", "syncthing"))
-        binary = "/usr/bin/syncthing"
+    if o.method in ("epel", "package", "distro"):
+        if osi.pkg == "apt-get" or not osi.rhel_like:
+            steps.append(Step.cmd("Install syncthing package", "apt-get", "install", "-y", "syncthing"))
+            binary = "/usr/bin/syncthing"
+        else:
+            major = osi.major or "9"
+            if osi.id == "rhel":
+                steps.append(Step.cmd("Enable EPEL repository", "dnf", "install", "-y",
+                                      f"https://dl.fedoraproject.org/pub/epel/epel-release-latest-{major}.noarch.rpm"))
+            elif osi.id != "fedora":
+                steps.append(Step.cmd("Enable EPEL repository", "dnf", "install", "-y", "epel-release"))
+            steps.append(Step.cmd("Install syncthing package", "dnf", "install", "-y", "syncthing"))
+            binary = "/usr/bin/syncthing"
     elif o.method == "upstream":
         steps.append(Step.sh("Download latest Syncthing release from GitHub (checksum verified)",
                              _UPSTREAM_SCRIPT))

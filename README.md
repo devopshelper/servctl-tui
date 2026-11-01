@@ -109,18 +109,24 @@ Modules can be enabled or disabled in **Settings** (persisted to `/etc/servctl/c
 
 ## 🚀 Installation
 
-### Quick Install (Root / Server)
+### ⚡ 1-Line curl Install (Recommended)
+
+Install directly on any **Debian 11+, Ubuntu 20.04+, RHEL 9, Rocky Linux, AlmaLinux, or Fedora** system:
 
 ```bash
-# Clone or unpack
-git clone https://github.com/devopshelper/servctl-tui.git /opt/servctl-src
-cd /opt/servctl-src
+curl -fsSL https://raw.githubusercontent.com/devopshelper/servctl-tui/master/install.sh | sudo bash
+```
 
-# Install into isolated venv at /opt/servctl (links /usr/local/bin/servctl)
+This automatically configures Python, creates an isolated virtual environment at `/opt/servctl`, installs dependencies, and symlinks `/usr/local/bin/servctl`.
+
+---
+
+### Manual / Git Clone Install
+
+```bash
+git clone https://github.com/devopshelper/servctl-tui.git
+cd servctl-tui
 sudo ./install.sh
-
-# Run
-sudo servctl
 ```
 
 ### Safe Exploration Mode (Non-Root)
