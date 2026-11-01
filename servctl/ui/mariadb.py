@@ -114,7 +114,7 @@ class MariaDbPane(Pane):
         t.clear()
         for name, cs, tables, size in dbs:
             sysdb = name in m.SYSTEM_DBS
-            t.add_row(Text(name, style="dim" if sysdb else "bold"), cs, str(tables), human(size),
+            t.add_row(Text(name, style="" if sysdb else "bold"), cs, str(tables), human(size),
                       ", ".join(sorted(access.get(name, []))) or ("(system)" if sysdb else "-"), key=name)
 
         per_user = {}
@@ -125,7 +125,7 @@ class MariaDbPane(Pane):
         t.clear()
         for user, host, plugin in accounts:
             system = user in ("root", "mysql", "mariadb.sys")
-            t.add_row(Text(user or "(anonymous)", style="dim" if system else "bold"), host, plugin,
+            t.add_row(Text(user or "(anonymous)", style="" if system else "bold"), host, plugin,
                       ", ".join(per_user.get((user, host), [])) or ("all (admin)" if system else "-"),
                       key=f"{user}\t{host}")
 

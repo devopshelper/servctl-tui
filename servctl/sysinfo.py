@@ -79,7 +79,7 @@ def uptime() -> str:
 def load() -> Tuple[float, float, float]:
     try:
         return os.getloadavg()
-    except OSError:
+    except (OSError, AttributeError):
         return (0.0, 0.0, 0.0)
 
 

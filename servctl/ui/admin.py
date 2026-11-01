@@ -53,7 +53,7 @@ class OverviewPane(Pane):
         for k, v in (("host", h["host"]), ("os", h["os"]), ("kernel", f"{h['kernel']} ({h['arch']})"),
                      ("uptime", sysinfo.uptime()), ("selinux", se),
                      ("user", "root" if is_root() else "non-root (dry-run only)")):
-            host.append(f"{k:<8}", style="dim")
+            host.append(f"{k:<8}", style="bold cyan")
             host.append(f"{v}\n")
         self.ui(self.query_one("#ov-host", Static).update, host)
 
@@ -62,9 +62,9 @@ class OverviewPane(Pane):
         used, total, sused, stotal = sysinfo.memory()
         mem = Text()
         lp = 100 * l1 / cpus
-        mem.append(f"{'load':<6}", style="dim")
+        mem.append(f"{'load':<6}", style="bold cyan")
         mem.append(f"{l1:.2f} {l5:.2f} {l15:.2f}", style=sysinfo.pct_color(lp))
-        mem.append(f"  ({cpus} CPUs)\n", style="dim")
+        mem.append(f"  ({cpus} CPUs)\n")
         self._bar(mem, "cpu", lp, f"1-min load vs {cpus} CPUs")
         self._bar(mem, "mem", 100 * used / total if total else 0,
                   f"{sysinfo.human(used)} / {sysinfo.human(total)}")
@@ -85,7 +85,7 @@ class OverviewPane(Pane):
         shown = [(n, st) for n, st in states.items() if st not in ("inactive", "unknown")] or list(states.items())
         for name, st in shown:
             mark, style = {"active": ("[ up ]", "green"), "failed": ("[FAIL]", "bold red"),
-                           "activating": ("[ .. ]", "yellow")}.get(st, ("[ -- ]", "dim"))
+                           "activating": ("[ .. ]", "yellow")}.get(st, ("[ -- ]", "bright_black"))
             sv.append(mark + " ", style=style)
             sv.append(f"{name}\n")
         sv.append(f"\n{len(failed)} failed unit(s)", style="bold red" if failed else "green")
@@ -96,18 +96,18 @@ class OverviewPane(Pane):
     @staticmethod
     def _bar(t: Text, label: str, pct: float, detail: str, width: int = 30, label_w: int = 6) -> None:
         full, empty = sysinfo.bar(pct, width)
-        t.append(f"{label:<{label_w}}", style="dim")
+        t.append(f"{label:<{label_w}}", style="bold cyan")
         t.append(full, style=sysinfo.pct_color(pct))
-        t.append(empty, style="dim")
+        t.append(empty, style="bright_black")
         t.append(f" {pct:>3.0f}%  ", style="bold " + sysinfo.pct_color(pct))
-        t.append(detail + "\n", style="dim")
+        t.append(detail + "\n")
 
 
 class CleanupPane(Pane):
     def compose(self) -> ComposeResult:
         engine = cleanup.container_engine()
         with Horizontal(classes="buttons"):
-            yield Label("Quick presets: ", classes="dim")
+            yield Label("Quick presets: ", classes="lbl")
             yield Button("Safe Clean", id="cl-pre-safe", compact=True)
             yield Button("Deep Clean", id="cl-pre-deep", compact=True)
             yield Button("Containers Only", id="cl-pre-cont", compact=True)

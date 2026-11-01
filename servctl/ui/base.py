@@ -29,6 +29,25 @@ from textual.widgets import Button, Checkbox, DataTable, Input, Label, RichLog, 
 from ..core import Step, capture, is_root
 
 # Whole-cell scrollbars: the smooth ones use ▁▂▃ / ▉▊▋ partial blocks.
+try:
+    from textual.theme import Theme
+    PUTTY_THEME = Theme(
+        name="putty",
+        primary="#00afff",       # Bright clear cyan
+        secondary="#5fafff",     # Sky blue
+        accent="#ffaf00",        # Bright amber/gold
+        foreground="#ffffff",    # Crisp pure white
+        background="#000000",    # Native black PuTTY background
+        surface="#121212",       # Very dark slate/black surface
+        panel="#1c1c1c",         # Subtle dark panel
+        success="#00ff87",       # Bright spring green
+        warning="#ffff00",       # Vivid yellow
+        error="#ff5f5f",         # Bright red
+        dark=True,
+    )
+except ImportError:
+    PUTTY_THEME = None
+
 ScrollBarRender.VERTICAL_BARS = [" "] * 8
 ScrollBarRender.HORIZONTAL_BARS = [" "] * 8
 
@@ -79,95 +98,105 @@ class NavTable(DataTable):
             super().action_cursor_down()
 
 CSS = """
-Screen { layout: vertical; background: $background; }
+Screen { layout: vertical; background: $background; color: $text; }
 
 /* ---------- top bar ---------- */
-#topbar { dock: top; height: 1; background: $panel; }
-#brand { width: auto; padding: 0 1; text-style: bold; }
-#hostinfo { width: 1fr; color: $text-muted; padding: 0 1; }
+#topbar { dock: top; height: 1; background: $surface; }
+#brand { width: auto; padding: 0 1; text-style: bold; color: $accent; }
+#hostinfo { width: 1fr; color: $text; padding: 0 1; }
 #activity { width: auto; padding: 0 1; color: $accent; }
 #mode { width: auto; padding: 0 1; text-style: bold; }
-#mode.dry { background: $warning; color: $background; }
-#mode.live { background: $error; color: $text; }
-#clock { width: auto; padding: 0 1; color: $text-muted; }
+#mode.dry { background: $warning; color: #000000; }
+#mode.live { background: $error; color: #ffffff; }
+#clock { width: auto; padding: 0 1; color: $text; }
 
 /* ---------- layout ---------- */
 #body { height: 1fr; }
-#sidebar { width: 28; height: 100%; max-height: 100%; border: none; border-right: solid $primary 40%; background: $panel;
+#sidebar { width: 28; height: 100%; max-height: 100%; border: none; border-right: solid $primary; background: $surface;
            padding: 1 0; }
 #sidebar:focus { border-right: solid $accent; }
-#sidebar > .option-list--option-highlighted { background: $primary 50%; text-style: bold; }
-#sidebar:focus > .option-list--option-highlighted { background: $accent; color: $background; }
-#sidebar > .option-list--option-hover { background: $primary 20%; }
+#sidebar > .option-list--option { color: $text; }
+#sidebar > .option-list--option-disabled { color: $accent; text-style: bold; }
+#sidebar > .option-list--option-highlighted { background: $primary; color: #ffffff; text-style: bold; }
+#sidebar:focus > .option-list--option-highlighted { background: $accent; color: #000000; text-style: bold; }
+#sidebar > .option-list--option-hover { background: $surface-lighten-1; }
 #content { width: 1fr; }
 #content > * { height: 1fr; }
-#log { height: 12; border: solid $accent 50%; background: transparent; }
+#log { height: 12; border: solid $accent; background: $surface; color: $text; }
 #log.hidden { display: none; }
 
 /* ---------- panes ---------- */
 .pane { padding: 0 2; }
-PaneHeader { height: auto; margin: 1 0 0 0; padding: 0 0 0 0; border-bottom: solid $accent 60%; }
+PaneHeader { height: auto; margin: 1 0 0 0; padding: 0 0 0 0; border-bottom: solid $accent; }
 PaneHeader .ph-title { text-style: bold; color: $accent; }
-PaneHeader .ph-desc { color: $text-muted; }
-.section { text-style: bold; color: $text; margin: 1 0 0 0; border-bottom: solid $primary 30%; }
-.hint { color: $text-muted; margin: 0 0 1 0; }
+PaneHeader .ph-desc { color: $text; }
+.section { text-style: bold; color: $accent; margin: 1 0 0 0; border-bottom: solid $primary; }
+.hint { color: $text; margin: 0 0 1 0; }
 .row { height: auto; margin: 0 0 1 0; }
-.row > .lbl { width: 26; color: $text-muted; }
+.row > .lbl { width: 26; color: $text; text-style: bold; }
 .row > Input, .row > Select { width: 1fr; max-width: 64; }
 .checks { layout: grid; grid-size: 3; grid-rows: 1; height: auto; grid-gutter: 1 2; margin: 0 0 1 0; }
+.label, .lbl { color: $text; text-style: bold; }
 .buttons { height: auto; margin: 1 0; }
 .buttons Button { margin: 0 2 0 0; }
-.info { border: solid $primary 40%; border-title-color: $accent; padding: 0 1; height: auto;
-        max-height: 20; overflow-y: auto; margin: 1 0 0 0; }
+.info { border: solid $primary; border-title-color: $accent; padding: 0 1; height: auto;
+        max-height: 20; overflow-y: auto; margin: 1 0 0 0; background: $surface; color: $text; }
 .warn { color: $warning; text-style: bold; }
-.out { height: 16; border: solid $primary 40%; border-title-color: $accent; background: transparent; }
+.out { height: 16; border: solid $primary; border-title-color: $accent; background: $surface; color: $text; }
 .big { text-style: bold; padding: 1 2; border: solid $success; border-title-color: $success;
-       height: auto; margin: 1 0 0 0; }
-DataTable.results { height: auto; max-height: 20; margin: 1 0; border: solid $primary 40%; background: transparent;
+       height: auto; margin: 1 0 0 0; color: $text; }
+DataTable.results { height: auto; max-height: 20; margin: 1 0; border: solid $primary; background: $surface;
                     border-title-color: $accent; }
+DataTable > .datatable--header { background: $panel; color: $text; text-style: bold; }
+DataTable > .datatable--cursor { background: $accent; color: #000000; text-style: bold; }
 
 /* ---------- overview dashboard ---------- */
 #ov-grid { layout: grid; grid-size: 2; grid-columns: 1fr 1fr; grid-gutter: 1 2; height: auto; margin: 1 0; }
-.card { border: solid $primary 50%; border-title-color: $accent; border-title-style: bold;
-        padding: 0 1; height: auto; min-height: 8; }
+.card { border: solid $primary; border-title-color: $accent; border-title-style: bold;
+        padding: 0 1; height: auto; min-height: 8; background: $surface; }
 #ov-mem, #ov-disks { column-span: 2; }
 
 /* ---------- compact widgets: give them a visible field background ---------- */
-Input.-textual-compact { background: $boost; }
-Input.-textual-compact:focus { background: $primary 25%; }
-Select.-textual-compact > SelectCurrent { background: $boost; }
-Select.-textual-compact:focus > SelectCurrent { background: $primary 25%; }
-SelectOverlay { border: solid $accent; }
-Checkbox.-textual-compact { background: transparent; }
-.pane > Checkbox { margin: 0 0 1 0; }
+Input.-textual-compact { background: $panel; color: $text; }
+Input.-textual-compact:focus { background: $surface-lighten-2; color: $text; text-style: bold; }
+Select.-textual-compact > SelectCurrent { background: $panel; color: $text; }
+Select.-textual-compact:focus > SelectCurrent { background: $surface-lighten-2; color: $text; }
+SelectOverlay { border: solid $accent; background: $surface; }
+Checkbox.-textual-compact { background: transparent; color: $text; }
+.pane > Checkbox { margin: 0 0 1 0; color: $text; }
 .checks.two { grid-size: 2; }
-Checkbox.-textual-compact:focus { background: $primary 25%; }
-Button.-textual-compact { min-width: 10; padding: 0 2; background: $panel-lighten-2; color: auto 90%;
+Checkbox.-textual-compact:focus { background: $surface-lighten-1; }
+Button.-textual-compact { min-width: 10; padding: 0 2; background: $panel; color: $text;
                           text-style: bold; }
-Button.-textual-compact:hover { background: $panel-lighten-3; }
-Button.-textual-compact.-primary { background: $primary; color: auto 90%; }
-Button.-textual-compact.-success { background: $success; color: auto 90%; }
-Button.-textual-compact.-warning { background: $warning; color: auto 90%; }
-Button.-textual-compact.-error { background: $error; color: auto 90%; }
-Button.-textual-compact:focus { background: $accent; color: auto 90%; text-style: bold underline; }
-Button.-textual-compact:disabled { background: $panel; color: $text-disabled; text-style: none; }
+Button.-textual-compact:hover { background: $panel-lighten-1; }
+Button.-textual-compact.-primary { background: $primary; color: #ffffff; text-style: bold; }
+Button.-textual-compact.-success { background: $success; color: #000000; text-style: bold; }
+Button.-textual-compact.-warning { background: $warning; color: #000000; text-style: bold; }
+Button.-textual-compact.-error { background: $error; color: #ffffff; text-style: bold; }
+Button.-textual-compact:focus { background: $accent; color: #000000; text-style: bold underline; }
+Button.-textual-compact:disabled { background: $surface; color: $text-muted; text-style: none; }
+
+/* ---------- footer ---------- */
+Footer { background: $surface; color: $text; }
+Footer FooterKey { color: $accent; text-style: bold; }
+Footer FooterLabel { color: $text; }
 
 /* ---------- Textual built-ins that default to block-glyph borders ---------- */
-Toast { border-left: solid $success; }
+Toast { border-left: solid $success; background: $surface-lighten-1; color: $text; }
 Toast.-information { border-left: solid $success; }
 Toast.-warning { border-left: solid $warning; }
 Toast.-error { border-left: solid $error; }
 FooterKey.-command-palette { border-left: solid $foreground 20%; }
 CommandPalette #--input { border: solid $accent; }
-CommandList { border: none; border-bottom: solid $primary 40%; }
-CommandList:focus { border: none; border-bottom: solid $primary 40%; }
+CommandList { border: none; border-bottom: solid $primary; }
+CommandList:focus { border: none; border-bottom: solid $primary; }
 
 /* ---------- confirm dialog ---------- */
-ConfirmScreen { align: center middle; background: $background 60%; }
+ConfirmScreen { align: center middle; background: $background 70%; }
 #dialog { width: 90%; max-width: 120; height: 85%; border: double $warning;
           border-title-color: $warning; border-title-style: bold; background: $surface; padding: 1 2; }
 #dialog.dry { border: double $primary; border-title-color: $primary; }
-#dialog-plan { height: 1fr; border: solid $primary 40%; margin: 1 0; padding: 0 1; }
+#dialog-plan { height: 1fr; border: solid $primary; margin: 1 0; padding: 0 1; background: $surface-darken-1; color: $text; }
 #dialog-buttons { height: auto; align-horizontal: right; }
 #dialog-buttons Button { margin-left: 2; }
 """
@@ -351,7 +380,17 @@ class ConfirmScreen(ModalScreen[bool]):
                 body.append("  (failure tolerated)", style="dim")
             body.append("\n")
             for line in s.describe().splitlines():
-                style = "green" if line.lstrip().startswith("$") else "dim" if "│" in line else ""
+                stripped = line.strip()
+                if stripped.startswith("$"):
+                    style = "bold green"
+                elif stripped.startswith("+"):
+                    style = "green"
+                elif stripped.startswith("-"):
+                    style = "red"
+                elif stripped.startswith("@"):
+                    style = "cyan"
+                else:
+                    style = ""
                 body.append("    " + line + "\n", style=style)
             body.append("\n")
         mode = ("DRY-RUN - commands are only printed, nothing is changed." if self.dry_run else

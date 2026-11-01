@@ -23,7 +23,7 @@ from ..core import Step, is_root, os_info, run_plan
 from ..registry import BUILTIN, CATEGORIES, Module, load_plugins, resolve_enabled
 from .admin import (CleanupPane, JournaldPane, LogrotatePane, OverviewPane, SiemPane,
                     SyncthingPane)
-from .base import CSS, BackupModalScreen, ConfirmScreen, HelpScreen, Pane, PaneHeader
+from .base import CSS, BackupModalScreen, ConfirmScreen, HelpScreen, Pane, PaneHeader, PUTTY_THEME
 from .firewall import FirewallPane
 from .mariadb import MariaDbPane
 from .fx import Activity, Brand, Splash, slide_in
@@ -38,7 +38,7 @@ PANES: Dict[str, type] = {
     "firewall": FirewallPane, "mariadb": MariaDbPane,
 }
 
-DEFAULT_THEME = "tokyo-night"
+DEFAULT_THEME = "putty" if PUTTY_THEME else "textual-dark"
 
 
 class ServctlApp(App):
@@ -101,8 +101,16 @@ class ServctlApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        if PUTTY_THEME and hasattr(self, "register_theme"):
+            try:
+                self.register_theme(PUTTY_THEME)
+            except Exception:
+                pass
         theme = self.cfg.get("ui.theme") or DEFAULT_THEME
-        self.theme = theme if theme in self.available_themes else DEFAULT_THEME
+        if theme not in self.available_themes:
+            # Unknown/removed theme name: fall back to the shipped default.
+            theme = DEFAULT_THEME if DEFAULT_THEME in self.available_themes else "textual-dark"
+        self.theme = theme
         self.theme_changed_signal.subscribe(self, self._theme_changed)
         self._update_mode()
         self._tick_clock()
@@ -152,10 +160,12 @@ class ServctlApp(App):
                 continue
             if options:
                 options.append(Option(" ", disabled=True))
-            options.append(Option(Text(f" {cat.upper()}", style="bold dim"), disabled=True))
+            # No explicit colour: the .option-list--option-disabled CSS rule paints
+            # these with the theme accent, so they follow theme changes.
+            options.append(Option(Text(f" {cat.upper()}"), disabled=True))
             options += [Option(f"   {m.title}", id=m.id) for m in in_cat]
         options.append(Option(" ", disabled=True))
-        options.append(Option(Text(" " + "─" * 24, style="dim"), disabled=True))
+        options.append(Option(Text(" " + "─" * 24), disabled=True))
         options.append(Option("   Settings", id="settings"))
         sidebar.add_options(options)
 

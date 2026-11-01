@@ -168,10 +168,23 @@ Designed for pure keyboard flow without touching the mouse:
 
 ## 🎨 Appearance & Themes
 
-* **Themes**: Live theme previews via **Settings** or <kbd>Ctrl+P</kbd> → *Change theme*. Default: `tokyo-night`.
+* **Themes**: Live theme previews via **Settings** or <kbd>Ctrl+P</kbd> → *Change theme*. Default: `putty` — pure black background, crisp white text, and bright cyan/amber accents, tuned for the limited palettes and low-contrast fonts of PuTTY and other minimal SSH clients.
+* **High-Contrast by Default**: Labels, values, hints, headings, table headers, buttons and the footer all use full-brightness colours. Nothing important is drawn with `dim` or a muted 60%-alpha grey, which most terminal emulators render as near-invisible dark grey on black.
 * **Animations**: Shimmering gradient wordmark, smooth slide-ins, top-bar activity comet, and count-up benchmarks. Can be toggled off for high-latency SSH connections (`ui.animations: false`).
 * **Terminal Glyph Policy**: Only CP437/WGL4 characters are drawn (`┌─┐`, `░▒▓█`, ASCII). Renders cleanly in PuTTY, minimal serial consoles, and Windows Terminal without missing-character boxes.
-* **Colors**: Automatically upgrades plain `TERM=xterm` (16 colors) to 256 colors (`xterm-256color`) or truecolor.
+* **Colors**: Automatically upgrades plain `TERM=xterm`, `putty`, `vt100`, `screen` and `linux` (16 colors) to 256 colors (`xterm-256color`). Override with `--colors` or `ui.colors`.
+
+### Picking a theme for your terminal
+
+```bash
+servctl --theme putty           # default: maximum contrast on a black background
+servctl --theme textual-dark    # neutral dark grey
+servctl --theme monokai         # high-chroma, for truecolor terminals
+servctl --theme putty --colors 256       # force 256-colour output
+servctl --theme putty --colors truecolor # force 24-bit output
+```
+
+If your terminal reports a plain `TERM` (common with PuTTY over SSH), `servctl` promotes it to 256 colours on its own — no `export TERM=...` needed. Colour settings persist to the config file on the next start.
 
 ---
 
@@ -183,7 +196,7 @@ Configuration is stored in `/etc/servctl/config.yml` (root) or `~/.config/servct
 modules:
   enabled: [overview, cleanup, firewall, mariadb, journald, unbound, maildns, dnsbench, settings]
 ui:
-  theme: tokyo-night
+  theme: putty          # putty | textual-dark | monokai | nord | gruvbox | ...
   colors: auto          # auto | 16 | 256 | truecolor
   animations: true
   splash: true
@@ -214,6 +227,8 @@ CLI overrides:
 servctl --list-modules
 servctl --modules firewall,cleanup    # Temporarily restrict UI to specified panes
 servctl --dry-run                     # Force simulation mode
+servctl --theme putty                 # Pick a UI theme for this run
+servctl --colors 256                  # auto | 16 | 256 | truecolor
 ```
 
 ---

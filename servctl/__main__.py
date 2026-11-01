@@ -20,7 +20,7 @@ def apply_color_mode(mode: str) -> None:
     elif mode == "16":
         os.environ.pop("COLORTERM", None)
         os.environ["TERM"] = "xterm"
-    elif os.environ.get("TERM") == "xterm" and not os.environ.get("COLORTERM"):
+    elif os.environ.get("TERM") in ("xterm", "putty", "vt100", "vt220", "screen", "linux") and not os.environ.get("COLORTERM"):
         os.environ["TERM"] = "xterm-256color"
 
 
@@ -33,6 +33,9 @@ def main() -> None:
     parser.add_argument("--modules", help="comma-separated module ids to show, overriding the config")
     parser.add_argument("--list-modules", action="store_true", help="print module ids and exit")
     parser.add_argument("--version", action="version", version=f"servctl {__version__}")
+    parser.add_argument("--theme", help="override UI theme (e.g. putty, textual-dark, monokai, nord)")
+    parser.add_argument("--colors", choices=["auto", "16", "256", "truecolor"],
+                        help="terminal color mode (default: auto)")
     args = parser.parse_args()
 
     from .config import Config
@@ -46,7 +49,9 @@ def main() -> None:
             print(f"{'*' if on else ' '} {m.id:<10} {m.category:<9} {m.description}")
         return
 
-    apply_color_mode(cfg.get("ui.colors") or "auto")
+    apply_color_mode(args.colors or cfg.get("ui.colors") or "auto")
+    if args.theme:
+        cfg.set("ui.theme", args.theme)
     pinned = [x.strip() for x in args.modules.split(",") if x.strip()] if args.modules else None
     if pinned:
         unknown = [p for p in pinned if p not in {m.id for m in BUILTIN}]

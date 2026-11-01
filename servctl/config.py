@@ -22,7 +22,7 @@ DEFAULTS: Dict[str, Any] = {
         "enabled": None,
     },
     "ui": {
-        "theme": "tokyo-night",
+        "theme": "putty",
         "colors": "auto",        # auto | 16 | 256 | truecolor
         "animations": True,
         "splash": True,

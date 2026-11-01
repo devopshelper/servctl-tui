@@ -13,7 +13,7 @@ from .. import firewall as fw
 from .base import NavTable, Pane, row, section
 
 VERDICT_STYLE = {"accept": "bold green", "drop": "bold red", "reject": "bold red"}
-REACH_STYLE = {"open": "green", "restricted": "yellow", "BLOCKED": "bold red", "localhost only": "dim",
+REACH_STYLE = {"open": "green", "restricted": "yellow", "BLOCKED": "bold red", "localhost only": "cyan",
                "open (no filter)": "green", "open (no firewall)": "green"}
 
 

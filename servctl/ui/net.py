@@ -80,7 +80,7 @@ class SpeedtestPane(Pane):
             t.append(f" {r.up_mbps * p:>9,.1f} Mbit/s    ", style="bold cyan")
             t.append("  PING ", style="bold reverse yellow")
             t.append(f" {r.ping_ms * p:>6.1f} ms  (jitter {r.jitter_ms * p:.1f})\n\n", style="bold yellow")
-            t.append(f"{r.engine}  ·  {r.server}  ·  public IP {r.ip or '?'}  {r.extra}", style="dim")
+            t.append(f"{r.engine}  ·  {r.server}  ·  public IP {r.ip or '?'}  {r.extra}", style="cyan")
             return t
         count_up(self.query_one("#sp-result", Static), render)
         self.query_one("#sp-hist", DataTable).add_row(

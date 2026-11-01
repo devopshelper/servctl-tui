@@ -112,9 +112,9 @@ class Activity(Static):
             idx = round(pos - k if forward else pos + k)
             if 0 <= idx < self.TRACK and cells[idx] == " ":
                 cells[idx] = ch
-        bar = Text("[", style="dim")
+        bar = Text("[", style="bold")
         bar.append_text(shimmer_text("".join(cells), stops, None, bold=False))
-        bar.append("] ", style="dim")
+        bar.append("] ", style="bold")
         bar.append_text(shimmer_text(label, stops, (t * 0.5) % 1.4 - 0.2))
         self.update(bar)
 
@@ -126,7 +126,7 @@ class Splash(ModalScreen[None]):
     Splash { align: center middle; background: $background; }
     #splash { width: auto; height: auto; padding: 1 4; border: double $accent; background: $surface; }
     #splash-logo { width: auto; }
-    #splash-sub { width: 100%; text-align: center; color: $text-muted; margin-top: 1; }
+    #splash-sub { width: 100%; text-align: center; color: $text; margin-top: 1; }
     """
 
     def __init__(self, version: str, duration: float = 1.6) -> None:
